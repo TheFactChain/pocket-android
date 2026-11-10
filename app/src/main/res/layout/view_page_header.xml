@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Title centred on the full width, like iOS; «Назад» sits over it on the left -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="52dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp">
+
+    <TextView
+        android:id="@+id/page_title"
+        style="@style/PageTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:accessibilityHeading="true" />
+
+    <TextView
+        android:id="@+id/page_back"
+        style="@style/TextAction"
+        android:layout_gravity="center_vertical|start"
+        android:text="Назад"
+        android:textSize="15sp" />
+</FrameLayout>

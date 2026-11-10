@@ -47,8 +47,14 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 public class Utility {
     // Determine if the current app is the owner of the current profile
@@ -88,7 +94,7 @@ public class Utility {
         PackageManager pm = context.getPackageManager();
         List<ResolveInfo> info = pm.queryIntentActivities(intent, 0);
         Optional<ResolveInfo> i = info.stream()
-                .filter((r) -> !r.activityInfo.packageName.equals(context.getPackageName()))
+                .filter((r) -> "android".equals(r.activityInfo.packageName))
                 .findFirst();
         if (i.isPresent()) {
             intent.setComponent(new ComponentName(i.get().activityInfo.packageName, i.get().activityInfo.name));
@@ -126,10 +132,11 @@ public class Utility {
         // Hide this app in the work profile
         context.getPackageManager().setComponentEnabledSetting(
                 new ComponentName(context.getApplicationContext(), MainActivity.class),
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED, 0);
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP);
 
-        // Clear everything first to ensure our policies are set properly
+        // Replaces old broad sharing and browser bridges during upgrades, too.
         manager.clearCrossProfileIntentFilters(adminComponent);
+        manager.addCrossProfileIntentFilter(adminComponent, new IntentFilter(DummyActivity.AUTHENTICATE), DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT);
 
         // Allow cross-profile intents for START_SERVICE
         manager.addCrossProfileIntentFilter(
@@ -146,32 +153,6 @@ public class Utility {
                 adminComponent,
                 new IntentFilter(DummyActivity.UNFREEZE_AND_LAUNCH),
                 DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT);
-
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                new IntentFilter(DummyActivity.FREEZE_ALL_IN_LIST),
-                DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT);
-
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                new IntentFilter(DummyActivity.PUBLIC_FREEZE_ALL),
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED); // Used by FreezeService in profile
-
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                new IntentFilter(DummyActivity.FINALIZE_PROVISION),
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED);
-
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                new IntentFilter(DummyActivity.START_FILE_SHUTTLE),
-                DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT);
-
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                new IntentFilter(DummyActivity.START_FILE_SHUTTLE_2),
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED);
-
         manager.addCrossProfileIntentFilter(
                 adminComponent,
                 new IntentFilter(DummyActivity.SYNCHRONIZE_PREFERENCE),
@@ -188,44 +169,16 @@ public class Utility {
                 new IntentFilter(DummyActivity.UNINSTALL_PACKAGE),
                 DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT);
 
-        // Allow ACTION_SEND and ACTION_SEND_MULTIPLE to cross from managed to parent
-        IntentFilter actionSendFilter = new IntentFilter();
-        actionSendFilter.addAction(Intent.ACTION_SEND);
-        actionSendFilter.addAction(Intent.ACTION_SEND_MULTIPLE);
-        try {
-            actionSendFilter.addDataType("*/*");
-        } catch (IntentFilter.MalformedMimeTypeException ignored) {
-            // WTF?
+        manager.setCrossProfileContactsSearchDisabled(adminComponent, true);
+        manager.setCrossProfileCallerIdDisabled(adminComponent, true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            manager.setCrossProfilePackages(adminComponent, Collections.emptySet());
         }
-        actionSendFilter.addCategory(Intent.CATEGORY_DEFAULT);
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                actionSendFilter,
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED);
-        
-        // Browser intents are allowed from work profile to parent
-        IntentFilter browsableIntentFilter = new IntentFilter(Intent.ACTION_VIEW);
-        browsableIntentFilter.addCategory(Intent.CATEGORY_BROWSABLE);
-        browsableIntentFilter.addDataScheme("http");
-        browsableIntentFilter.addDataScheme("https");
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                browsableIntentFilter,
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED);
-        IntentFilter browsableDefaultIntentFilter = new IntentFilter(Intent.ACTION_VIEW);
-        browsableDefaultIntentFilter.addCategory(Intent.CATEGORY_BROWSABLE);
-        browsableDefaultIntentFilter.addCategory(Intent.CATEGORY_DEFAULT);
-        browsableDefaultIntentFilter.addDataScheme("http");
-        browsableDefaultIntentFilter.addDataScheme("https");
-        manager.addCrossProfileIntentFilter(
-                adminComponent,
-                browsableDefaultIntentFilter,
-                DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED);
+        for (String provider : manager.getCrossProfileWidgetProviders(adminComponent)) {
+            manager.removeCrossProfileWidgetProvider(adminComponent, provider);
+        }
 
-        // Block contacts searching optionally
-        manager.setCrossProfileContactsSearchDisabled(adminComponent,
-                SettingsManager.getInstance().getBlockContactsSearchingEnabled());
-
+        net.typeblog.shelter.vpn.ProtectionPolicy.ensure(context);
         manager.setProfileEnabled(adminComponent);
     }
 
@@ -242,7 +195,7 @@ public class Utility {
             manager.setSecureSetting(adminComponent, Settings.Secure.INSTALL_NON_MARKET_APPS, "1");
         }
 
-        manager.addUserRestriction(adminComponent, UserManager.ALLOW_PARENT_PROFILE_APP_LINKING);
+        manager.clearUserRestriction(adminComponent, UserManager.ALLOW_PARENT_PROFILE_APP_LINKING);
     }
 
     // Detect if the device is MIUI
@@ -329,6 +282,66 @@ public class Utility {
         }
     }
 
+    public static Intent registerWorkShortcut(Context context, long profileSerial, String packageName, String[] linkedPackages) {
+        if (isProfileOwner(context) || profileSerial < 0) throw new IllegalStateException("Рабочий профиль недоступен");
+        requireShortcutPackage(packageName);
+        if (linkedPackages == null) linkedPackages = new String[0];
+        if (linkedPackages.length > 128) throw new IllegalArgumentException("Слишком много связанных приложений");
+        JSONArray linked = new JSONArray();
+        for (String name : linkedPackages) {
+            requireShortcutPackage(name);
+            linked.put(name);
+        }
+        String token = UUID.randomUUID().toString();
+        try {
+            JSONObject record = new JSONObject().put("profileSerial", profileSerial)
+                    .put("packageName", packageName).put("linkedPackages", linked);
+            if (!context.getSharedPreferences("pocket_work_shortcuts_v1", Context.MODE_PRIVATE)
+                    .edit().putString(token, record.toString()).commit()) {
+                throw new IllegalStateException("Не удалось сохранить рабочий ярлык");
+            }
+        } catch (JSONException e) {
+            throw new IllegalArgumentException("Некорректная цель рабочего ярлыка");
+        }
+        return new Intent(DummyActivity.PUBLIC_UNFREEZE_AND_LAUNCH)
+                .setComponent(new ComponentName(context, DummyActivity.class))
+                .putExtra("_pocket_shortcut", token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    public static Intent resolveWorkShortcut(Context context, String token) {
+        if (isProfileOwner(context) || token == null || !token.matches("[a-f0-9-]{36}")) {
+            throw new IllegalArgumentException("Пересоздай рабочий ярлык в Pocket");
+        }
+        String stored = context.getSharedPreferences("pocket_work_shortcuts_v1", Context.MODE_PRIVATE)
+                .getString(token, null);
+        if (stored == null) throw new IllegalArgumentException("Пересоздай рабочий ярлык в Pocket");
+        try {
+            JSONObject record = new JSONObject(stored);
+            long serial = record.getLong("profileSerial");
+            if (serial < 0) throw new IllegalArgumentException("Рабочий профиль недоступен");
+            String packageName = record.getString("packageName");
+            requireShortcutPackage(packageName);
+            JSONArray linked = record.getJSONArray("linkedPackages");
+            if (linked.length() > 128) throw new IllegalArgumentException("Некорректная цель рабочего ярлыка");
+            String[] packages = new String[linked.length()];
+            for (int i = 0; i < packages.length; i++) {
+                packages[i] = linked.getString(i);
+                requireShortcutPackage(packages[i]);
+            }
+            return new Intent(DummyActivity.UNFREEZE_AND_LAUNCH).putExtra("profileSerial", serial)
+                    .putExtra("packageName", packageName).putExtra("linkedPackages", packages);
+        } catch (JSONException e) {
+            throw new IllegalArgumentException("Пересоздай рабочий ярлык в Pocket");
+        }
+    }
+
+    private static void requireShortcutPackage(String value) {
+        if (value == null || value.length() > 255
+                || !value.matches("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+")) {
+            throw new IllegalArgumentException("Некорректная цель рабочего ярлыка");
+        }
+    }
+
     public static int getMediaStoreId(Context context, String path) {
         Cursor cursor = context.getContentResolver().query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -339,7 +352,7 @@ public class Utility {
             return -1;
         } else {
             cursor.moveToFirst();
-            return cursor.getInt(cursor.getColumnIndex(MediaStore.MediaColumns._ID));
+            return cursor.getInt(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
         }
     }
 

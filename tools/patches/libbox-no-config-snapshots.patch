@@ -1,0 +1,45 @@
+diff --git a/experimental/libbox/command_server.go b/experimental/libbox/command_server.go
+index ec0af2a..ffa44f8 100644
+--- a/experimental/libbox/command_server.go
++++ b/experimental/libbox/command_server.go
+@@ -195,7 +195,7 @@ type OverrideOptions struct {
+ }
+ 
+ func (s *CommandServer) StartOrReloadService(configContent string, options *OverrideOptions) error {
+-	saveConfigSnapshot(configContent)
++	// Pocket never persists decrypted configuration snapshots.
+ 	if s.powerManager.Recorder() != nil {
+ 		copyConfigSnapshot(filepath.Join(sWorkingPath, powerreport.DraftDirectoryName))
+ 	}
+diff --git a/experimental/libbox/report.go b/experimental/libbox/report.go
+index ff5e0f4..bb2e893 100644
+--- a/experimental/libbox/report.go
++++ b/experimental/libbox/report.go
+@@ -3,7 +3,6 @@
+ package libbox
+ 
+ import (
+-	"bytes"
+ 	"encoding/json"
+ 	"os"
+ 	"path/filepath"
+@@ -60,17 +59,8 @@ func writeReportMetadata(destPath string, metadata any) {
+ 	writeReportFile(destPath, "metadata.json", data)
+ }
+ 
+-func copyConfigSnapshot(destPath string) {
+-	snapshotPath := configSnapshotPath()
+-	content, err := os.ReadFile(snapshotPath)
+-	if err != nil {
+-		return
+-	}
+-	if len(bytes.TrimSpace(content)) == 0 {
+-		return
+-	}
+-	writeReportFile(destPath, "configuration.json", content)
+-}
++// Pocket keeps decrypted configuration in memory and never includes it in reports.
++func copyConfigSnapshot(_ string) {}
+ 
+ func platformSnapshotPath() string {
+ 	return filepath.Join(sWorkingPath, "PlatformMetadata-"+sCrashReportSource+".json")

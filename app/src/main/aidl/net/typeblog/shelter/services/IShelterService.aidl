@@ -12,6 +12,7 @@ import net.typeblog.shelter.util.UriForwardProxy;
 
 interface IShelterService {
     void ping();
+    String attest(String nonce);
     void stopShelterService(boolean kill);
     void getApps(IGetAppsCallback callback, boolean showAll);
     void loadIcon(in ApplicationInfoWrapper info, ILoadIconCallback callback);
@@ -28,4 +29,12 @@ interface IShelterService {
     void setStartActivityProxy(in IStartActivityProxy proxy);
     List<String> getCrossProfilePackages();
     void setCrossProfilePackages(in List<String> packages);
+    String getPocketState();
+    String listConnections();
+    String readConnection(String id);
+    String saveConnection(String json);
+    void activateConnection(String id);
+    void deleteConnection(String id);
+    void setDirectRu(boolean enabled);
+    void checkConnectionNow();
 }

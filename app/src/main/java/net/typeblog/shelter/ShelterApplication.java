@@ -18,7 +18,13 @@ public class ShelterApplication extends Application {
     public void onCreate() {
         super.onCreate();
         LocalStorageManager.initialize(this);
+        net.typeblog.shelter.util.AuthenticationUtility.initialize(this);
         SettingsManager.initialize(this);
+        if(getPackageName().equals(Application.getProcessName()) && net.typeblog.shelter.vpn.ProtectionPolicy.isOwner(this)) {
+            try {
+                net.typeblog.shelter.util.Utility.enforceWorkProfilePolicies(this);
+            }catch(RuntimeException e){android.util.Log.w("PocketVPN","Work profile policy needs attention");}
+        }
     }
 
     public void bindShelterService(ServiceConnection conn, boolean foreground) {

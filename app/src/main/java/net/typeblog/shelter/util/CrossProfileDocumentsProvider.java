@@ -16,6 +16,7 @@ import android.provider.DocumentsProvider;
 
 import androidx.annotation.Nullable;
 
+import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.services.FileShuttleService;
 import net.typeblog.shelter.services.IFileShuttleService;
@@ -32,7 +33,7 @@ import java.util.Map;
 public class CrossProfileDocumentsProvider extends DocumentsProvider {
     // The dummy root path that will be replaced by the real path to external storage on the other side
     public static final String DUMMY_ROOT = "/shelter_storage_root/";
-    private static final String AUTHORITY = "net.typeblog.shelter.documents";
+    private static final String AUTHORITY = BuildConfig.APPLICATION_ID + ".documents";
     private static final String[] DEFAULT_ROOT_PROJECTION = new String[] {
             DocumentsContract.Root.COLUMN_ROOT_ID,
             DocumentsContract.Root.COLUMN_DOCUMENT_ID, DocumentsContract.Root.COLUMN_ICON,

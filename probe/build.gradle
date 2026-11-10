@@ -1,0 +1,47 @@
+apply plugin: 'com.android.application'
+
+def probeKeystore = file('.local/debug.keystore')
+def prepareProbeDebugKeystore = tasks.register('prepareProbeDebugKeystore', Exec) {
+    outputs.file(probeKeystore)
+    onlyIf { !probeKeystore.exists() }
+    doFirst { probeKeystore.parentFile.mkdirs() }
+    executable new File(System.getProperty('java.home'), 'bin/keytool' +
+            (System.getProperty('os.name').toLowerCase().contains('windows') ? '.exe' : ''))
+    args '-genkeypair', '-keystore', probeKeystore.absolutePath, '-storepass', 'android',
+            '-keypass', 'android', '-alias', 'androiddebugkey', '-keyalg', 'RSA', '-keysize', '2048',
+            '-validity', '10000', '-dname', 'CN=Android Debug,O=Android,C=US', '-noprompt'
+}
+
+android {
+    namespace 'io.github.nekontritce11123.pocketandroid.probe'
+    compileSdk 35
+    buildToolsVersion '36.0.0'
+    defaultConfig {
+        applicationId 'io.github.nekontritce11123.pocketandroid.probe'
+        minSdk 29
+        targetSdk 35
+        versionCode 3
+        versionName '1.2'
+    }
+    bundle {
+        language {
+            enableSplit = true
+        }
+    }
+    signingConfigs {
+        debug {
+            storeFile probeKeystore
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+tasks.configureEach {
+    if (name == 'validateSigningDebug') dependsOn(prepareProbeDebugKeystore)
+}

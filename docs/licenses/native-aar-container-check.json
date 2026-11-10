@@ -1,0 +1,89 @@
+{
+  "apk": "native-aar-container.zip",
+  "sha256": "887f82afdd551afe49493f7faa1cc95769a9be760f13e5ccb795bf39322f0ffc",
+  "checkedUtc": "2026-10-29T12:34:10.4316482Z",
+  "passed": true,
+  "libraries": [
+    {
+      "entry": "lib/arm64-v8a/libbox.so",
+      "machine": "Machine:                           AArch64",
+      "elfClass": "Class:                             ELF64",
+      "requiredAlignment": 16384,
+      "loadSegments": [
+        {
+          "offset": 0,
+          "virtualAddress": 0,
+          "alignment": 16384,
+          "aligned16KiB": true,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 11603424,
+          "virtualAddress": 11619808,
+          "alignment": 16384,
+          "aligned16KiB": true,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 33863808,
+          "virtualAddress": 33896576,
+          "alignment": 16384,
+          "aligned16KiB": true,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 60434832,
+          "virtualAddress": 60483984,
+          "alignment": 16384,
+          "aligned16KiB": true,
+          "compatibleWithAbiPageSize": true
+        }
+      ]
+    },
+    {
+      "entry": "lib/armeabi-v7a/libbox.so",
+      "machine": "Machine:                           ARM",
+      "elfClass": "Class:                             ELF32",
+      "requiredAlignment": 4096,
+      "loadSegments": [
+        {
+          "offset": 0,
+          "virtualAddress": 0,
+          "alignment": 4096,
+          "aligned16KiB": false,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 6799832,
+          "virtualAddress": 6803928,
+          "alignment": 4096,
+          "aligned16KiB": false,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 33400672,
+          "virtualAddress": 33408864,
+          "alignment": 4096,
+          "aligned16KiB": false,
+          "compatibleWithAbiPageSize": true
+        },
+        {
+          "offset": 56327008,
+          "virtualAddress": 56339296,
+          "alignment": 4096,
+          "aligned16KiB": false,
+          "compatibleWithAbiPageSize": true
+        }
+      ]
+    }
+  ],
+  "zipalignPassed": true,
+  "zipalignOutput": [
+    "Verifying alignment of native-aar-container.zip",
+    "   16384 lib/arm64-v8a/libbox.so (OK)",
+    "61407232 lib/armeabi-v7a/libbox.so (OK)",
+    "Verification successful"
+  ],
+  "failures": [],
+  "scope": "ELF architecture/LOAD alignment and APK ZIP alignment; no installation or runtime check"
+}

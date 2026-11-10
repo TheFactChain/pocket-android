@@ -5,4 +5,5 @@ import net.typeblog.shelter.util.ApplicationInfoWrapper;
 
 interface IGetAppsCallback {
     void callback(in List<ApplicationInfoWrapper> apps);
+    void onError(int reason);
 }

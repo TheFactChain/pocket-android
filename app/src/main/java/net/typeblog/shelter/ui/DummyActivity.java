@@ -3,43 +3,38 @@ package net.typeblog.shelter.ui;
 import android.Manifest;
 import android.app.Activity;
 import android.app.PendingIntent;
-import android.app.ProgressDialog;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
-import android.os.StrictMode;
-import android.view.LayoutInflater;
-import android.view.ViewGroup;
-import android.view.WindowManager;
-import android.widget.ProgressBar;
+import android.os.UserManager;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import androidx.core.content.ContextCompat;
 
+import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.ShelterApplication;
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver;
-import net.typeblog.shelter.services.FreezeService;
 import net.typeblog.shelter.services.IAppInstallCallback;
-import net.typeblog.shelter.services.IFileShuttleService;
-import net.typeblog.shelter.services.IFileShuttleServiceCallback;
 import net.typeblog.shelter.util.AuthenticationUtility;
 import net.typeblog.shelter.util.FileProviderProxy;
-import net.typeblog.shelter.util.InstallationProgressListener;
 import net.typeblog.shelter.util.LocalStorageManager;
-import net.typeblog.shelter.util.SettingsManager;
 import net.typeblog.shelter.util.Utility;
+import net.typeblog.shelter.vpn.ProtectionPolicy;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,7 +42,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,133 +51,165 @@ import java.util.UUID;
 // which is only possible through Intents that are in
 // the crossProfileIntentFilter
 public class DummyActivity extends Activity {
-    public static final String FINALIZE_PROVISION = "net.typeblog.shelter.action.FINALIZE_PROVISION";
-    public static final String START_SERVICE = "net.typeblog.shelter.action.START_SERVICE";
-    public static final String TRY_START_SERVICE = "net.typeblog.shelter.action.TRY_START_SERVICE";
-    public static final String INSTALL_PACKAGE = "net.typeblog.shelter.action.INSTALL_PACKAGE";
-    public static final String UNINSTALL_PACKAGE = "net.typeblog.shelter.action.UNINSTALL_PACKAGE";
-    public static final String UNFREEZE_AND_LAUNCH = "net.typeblog.shelter.action.UNFREEZE_AND_LAUNCH";
-    public static final String PUBLIC_UNFREEZE_AND_LAUNCH = "net.typeblog.shelter.action.PUBLIC_UNFREEZE_AND_LAUNCH";
-    public static final String PUBLIC_FREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_FREEZE_ALL";
-    public static final String FREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.FREEZE_ALL_IN_LIST";
+    public static final String FINALIZE_PROVISION = BuildConfig.APPLICATION_ID + ".action.FINALIZE_PROVISION";
+    public static final String AUTHENTICATE = BuildConfig.APPLICATION_ID + ".action.AUTHENTICATE";
+    public static final String START_SERVICE = BuildConfig.APPLICATION_ID + ".action.START_SERVICE";
+    public static final String TRY_START_SERVICE = BuildConfig.APPLICATION_ID + ".action.TRY_START_SERVICE";
+    public static final String INSTALL_PACKAGE = BuildConfig.APPLICATION_ID + ".action.INSTALL_PACKAGE";
+    public static final String UNINSTALL_PACKAGE = BuildConfig.APPLICATION_ID + ".action.UNINSTALL_PACKAGE";
+    public static final String UNFREEZE_AND_LAUNCH = BuildConfig.APPLICATION_ID + ".action.UNFREEZE_AND_LAUNCH";
+    public static final String PUBLIC_UNFREEZE_AND_LAUNCH = BuildConfig.APPLICATION_ID + ".action.PUBLIC_UNFREEZE_AND_LAUNCH";
+    public static final String PUBLIC_FREEZE_ALL = BuildConfig.APPLICATION_ID + ".action.PUBLIC_FREEZE_ALL";
+    public static final String FREEZE_ALL_IN_LIST = BuildConfig.APPLICATION_ID + ".action.FREEZE_ALL_IN_LIST";
     // If we use the same intent for parent -> profile and profile -> parent, the user will
     // be prompted with the action chooser with only one choice in it when the intent is
     // forwarded by Utility.transferIntentToProfile()
     // This is a bad experience, so we use two to avoid this.
-    public static final String START_FILE_SHUTTLE = "net.typeblog.shelter.action.START_FILE_SHUTTLE";
-    public static final String START_FILE_SHUTTLE_2 = "net.typeblog.shelter.action.START_FILE_SHUTTLE_2";
-    public static final String SYNCHRONIZE_PREFERENCE = "net.typeblog.shelter.action.SYNCHRONIZE_PREFERENCE";
-    public static final String PACKAGEINSTALLER_CALLBACK = "net.typeblog.shelter.action.PACKAGEINSTALLER_CALLBACK";
-
-    // Only these actions are allowed without a valid signature
-    private static final List<String> ACTIONS_ALLOWED_WITHOUT_SIGNATURE = Arrays.asList(
-            FINALIZE_PROVISION,
-            PUBLIC_FREEZE_ALL,
-            PUBLIC_UNFREEZE_AND_LAUNCH);
+    public static final String START_FILE_SHUTTLE = BuildConfig.APPLICATION_ID + ".action.START_FILE_SHUTTLE";
+    public static final String START_FILE_SHUTTLE_2 = BuildConfig.APPLICATION_ID + ".action.START_FILE_SHUTTLE_2";
+    public static final String SYNCHRONIZE_PREFERENCE = BuildConfig.APPLICATION_ID + ".action.SYNCHRONIZE_PREFERENCE";
+    public static final String PACKAGEINSTALLER_CALLBACK = BuildConfig.APPLICATION_ID + ".action.PACKAGEINSTALLER_CALLBACK";
 
     // Only these actions are allowed to be called from the same process (pre-registered)
     // without a valid signature
     private static final List<String> ACTIONS_ALLOWED_WITHOUT_SIGNATURE_SAME_PROCESS = Arrays.asList(
             INSTALL_PACKAGE,
             UNINSTALL_PACKAGE,
-            UNFREEZE_AND_LAUNCH);
+            UNFREEZE_AND_LAUNCH,
+            FINALIZE_PROVISION);
 
     private static final int REQUEST_INSTALL_PACKAGE = 1;
-    private static final int REQUEST_PERMISSION_EXTERNAL_STORAGE= 2;
     private static final int REQUEST_PERMISSION_POST_NOTIFICATIONS = 3;
+    private static final String INSTALL_LEDGER = "pocket_pending_install_v1";
+    private static final String STATE_BUSY = "pocket_operation_busy";
+    private static final String STATE_CALLBACK = "pocket_operation_callback";
 
     private static boolean sHasRequestedPermission = false;
 
-    // A state variable to record the last time DummyActivity was informed that someone
-    // in the same process needs to call an action without signature
-    // Since they must be in the same process as DummyActivity, it will be totally fine
-    // to share a memory state
-    private static volatile long sLastSameProcessRequest = -1;
-
-    // Register that an intent will be sent to this Activity without signature
-    // from the same process. Each registration is allowed for at most 5 seconds.
-    public static synchronized void registerSameProcessRequest(Intent intent) {
-        sLastSameProcessRequest = new Date().getTime();
-        intent.putExtra("is_same_process", true);
+    // One-use local capabilities restore the original payload instead of trusting forwarded extras.
+    private static final java.util.Map<String,LocalRequest> localRequests=new java.util.HashMap<>();
+    private static final class LocalRequest {
+        final Intent intent; final long expires;
+        LocalRequest(Intent value){intent=new Intent(value);expires=android.os.SystemClock.elapsedRealtime()+10000;}
     }
-
-    private static synchronized boolean checkSameProcessRequest(Intent intent) {
-        if (!intent.getBooleanExtra("is_same_process", false)) return false;
-        if (sLastSameProcessRequest == -1) return false;
-
-        boolean ret = new Date().getTime() - sLastSameProcessRequest <= 5000 // Timeout 5s
-                && ACTIONS_ALLOWED_WITHOUT_SIGNATURE_SAME_PROCESS.contains(intent.getAction());
-        if (ret) {
-            sLastSameProcessRequest = -1; // Revoke the registered request
-        }
-
-        return ret;
+    public static synchronized void registerSameProcessRequest(Intent intent){
+        long now=android.os.SystemClock.elapsedRealtime();
+        localRequests.entrySet().removeIf(entry -> entry.getValue().expires<now);
+        if(localRequests.size()>=32)throw new IllegalStateException("Too many pending operations");
+        String token=UUID.randomUUID().toString();
+        intent.putExtra("_pocket_local_request",token);
+        localRequests.put(token,new LocalRequest(intent));
     }
-
+    private static synchronized Intent takeLocalRequest(Intent intent){
+        LocalRequest request=localRequests.remove(intent.getStringExtra("_pocket_local_request"));
+        return request!=null && request.expires>=android.os.SystemClock.elapsedRealtime()?request.intent:null;
+    }
     private boolean mIsProfileOwner = false;
     private DevicePolicyManager mPolicyManager = null;
+    private InstallerCallbackGate mInstallerGate;
+    private PendingIntent mInstallerResult;
+    private PackageInstaller.SessionCallback mInstallerSessionCallback;
+    private Thread mInstallThread;
+    private boolean mBusy;
+    private boolean mPermissionPending;
+    private boolean mAwaitingUninstallResult;
+    private boolean mCompletionSent;
+    private Bundle mOperationCallback;
+
+    static final class InstallerCallbackGate {
+        final int sessionId;
+        final String token;
+        private boolean consumed;
+        volatile boolean cancelled;
+
+        InstallerCallbackGate(int sessionId, String token) {
+            this.sessionId = sessionId;
+            this.token = token;
+        }
+
+        synchronized boolean consume(int sessionId, String token) {
+            if (cancelled || consumed || this.sessionId != sessionId || !this.token.equals(token)) return false;
+            consumed = true;
+            return true;
+        }
+
+        void cancel() { cancelled = true; }
+    }
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         mPolicyManager = getSystemService(DevicePolicyManager.class);
         mIsProfileOwner = mPolicyManager.isProfileOwnerApp(getPackageName());
-        if (mIsProfileOwner) {
-            // If we are the profile owner, we enforce all our policies
-            // so that we can make sure those are updated with our app
-            Utility.enforceWorkProfilePolicies(this);
-            Utility.enforceUserRestrictions(this);
-            SettingsManager.getInstance().applyAll();
-
-            synchronized (DummyActivity.class) {
-                // Do not show permission dialog during finalization -- it will conflict with the provisioning UI
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !sHasRequestedPermission
-                        && !FINALIZE_PROVISION.equals(getIntent().getAction())) {
-                    // Avoid requesting permission multiple times in one session
-                    // This also prevents multiple instances of DummyActivity from being blocked on each other
-                    sHasRequestedPermission = true;
-                    // We pretty much only send notifications to keep the process inside work profile alive
-                    // as such, only request the notification permission from inside the profile
-                    // This will ideally be shown and done when the user sees the app list UI for the first time
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                            != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_PERMISSION_POST_NOTIFICATIONS);
-                        // Continue once the request has been completed (see onRequestPermissionResult)
-                        return;
-                    }
+        try {
+            boolean recovered = abandonRecordedInstall();
+            if (savedInstanceState != null || PACKAGEINSTALLER_CALLBACK.equals(getIntent().getAction())) {
+                if (savedInstanceState != null && savedInstanceState.getBoolean(STATE_BUSY)) {
+                    notifyInstallCallback(savedInstanceState.getBundle(STATE_CALLBACK), RESULT_CANCELED);
                 }
+                Toast.makeText(this, "Операция прервана. Проверь список приложений в Pocket и повтори её при необходимости.", Toast.LENGTH_LONG).show();
+                setResult(RESULT_CANCELED);
+                finish();
+                return;
             }
+            if (recovered) {
+                Toast.makeText(this, "Предыдущая установка прервана. Проверь список приложений в Pocket и повтори её при необходимости.", Toast.LENGTH_LONG).show();
+            }
+            receiveCommand(getIntent());
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "Не удалось завершить предыдущую операцию. Открой Pocket и повтори позже.", Toast.LENGTH_LONG).show();
+            setResult(RESULT_CANCELED);
+            finish();
         }
-
-        init();
     }
 
-    private void init() {
-        Intent intent = getIntent();
+    private Intent authorizeCommand(Intent intent) {
+        try {
+            if (PUBLIC_UNFREEZE_AND_LAUNCH.equals(intent.getAction())) {
+                return Utility.resolveWorkShortcut(this, intent.getStringExtra("_pocket_shortcut"));
+            }
+            Intent local = takeLocalRequest(intent);
+            if (local != null && ACTIONS_ALLOWED_WITHOUT_SIGNATURE_SAME_PROCESS.contains(local.getAction())) return local;
+            return AuthenticationUtility.checkIntent(intent) ? intent : null;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
 
-        // First check if we have a registered request from the same process
-        // if it passes, we don't have to check if it has proper signature any more
-        if (!checkSameProcessRequest(getIntent())) {
-            // Check the intent signature first
-            // Call checkIntent() first, because we might receive an auth_key from the other side any time.
-            // Calling checkIntent() will ensure that the first auth_key is properly received.
-            // ONLY the first received one should be stored and trusted.
-            if (!AuthenticationUtility.checkIntent(intent)) {
-                // If check failed and not in allowed-without-signature list
-                if (!ACTIONS_ALLOWED_WITHOUT_SIGNATURE.contains(intent.getAction())) {
-                    // Unauthenticated! Just exit IMMEDIATELY
-                    finish();
-                    return;
-                }
+    private void receiveCommand(Intent incoming) {
+        Intent command = authorizeCommand(incoming);
+        if (command == null) {
+            Toast.makeText(this, "Команда отклонена. Для рабочего ярлыка может потребоваться пересоздание в Pocket.", Toast.LENGTH_LONG).show();
+            if (!mBusy) { setResult(RESULT_CANCELED); finish(); }
+            return;
+        }
+        if (mBusy || isFinishing()) {
+            // A rejected command must never replace the active operation or its callback.
+            notifyInstallCallback(command.getBundleExtra("callback"), RESULT_CANCELED);
+            Toast.makeText(this, "Pocket занят другой операцией. Дождись её завершения и повтори.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        setIntent(command);
+        mOperationCallback = command.getBundleExtra("callback");
+        mCompletionSent = false;
+        mBusy = true;
+        if (mIsProfileOwner && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && !sHasRequestedPermission && !FINALIZE_PROVISION.equals(command.getAction())) {
+            sHasRequestedPermission = true;
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                mPermissionPending = true;
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_PERMISSION_POST_NOTIFICATIONS);
+                return;
             }
         }
+        dispatchCommand();
+    }
 
+    private void dispatchCommand() {
+        Intent intent = getIntent();
         if (START_SERVICE.equals(intent.getAction())) {
             actionStartService();
         } else if (TRY_START_SERVICE.equals(intent.getAction())) {
-            // Dummy activity with dummy intent won't ever fail :)
-            // This is used for testing if work mode is disabled from MainActivity
             setResult(RESULT_OK);
             finish();
         } else if (INSTALL_PACKAGE.equals(intent.getAction())) {
@@ -192,17 +218,12 @@ public class DummyActivity extends Activity {
             actionUninstallPackage();
         } else if (FINALIZE_PROVISION.equals(intent.getAction())) {
             actionFinalizeProvision();
-        } else if (UNFREEZE_AND_LAUNCH.equals(intent.getAction()) || PUBLIC_UNFREEZE_AND_LAUNCH.equals(intent.getAction())) {
+        } else if (UNFREEZE_AND_LAUNCH.equals(intent.getAction())) {
             actionUnfreezeAndLaunch();
-        } else if (PUBLIC_FREEZE_ALL.equals(intent.getAction())) {
-            actionPublicFreezeAll();
-        } else if (FREEZE_ALL_IN_LIST.equals(intent.getAction())) {
-            actionFreezeAllInList();
-        } else if (START_FILE_SHUTTLE.equals(intent.getAction()) || START_FILE_SHUTTLE_2.equals(intent.getAction())) {
-            actionStartFileShuttle();
         } else if (SYNCHRONIZE_PREFERENCE.equals(intent.getAction())) {
             actionSynchronizePreference();
         } else {
+            setResult(RESULT_CANCELED);
             finish();
         }
     }
@@ -211,20 +232,25 @@ public class DummyActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
 
-        if (intent.getAction().equals(PACKAGEINSTALLER_CALLBACK)) {
-            int status = intent.getExtras().getInt(PackageInstaller.EXTRA_STATUS);
-
-            switch (status) {
-                case PackageInstaller.STATUS_PENDING_USER_ACTION:
-                    startActivity((Intent) intent.getExtras().get(Intent.EXTRA_INTENT));
-                    break;
-                case PackageInstaller.STATUS_SUCCESS:
-                    appInstallFinished(Activity.RESULT_OK);
-                    break;
-                default:
-                    appInstallFinished(Activity.RESULT_CANCELED);
-                    break;
+        if (!PACKAGEINSTALLER_CALLBACK.equals(intent.getAction())) {
+            receiveCommand(intent);
+            return;
+        }
+        if (mInstallerGate == null) return;
+        try {
+            if (!mInstallerGate.consume(intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1),
+                    intent.getStringExtra("_pocket_install_token"))) return;
+            int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
+            if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                Intent confirmation = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+                if (confirmation == null) throw new IllegalArgumentException("Нет подтверждения установки");
+                startActivity(confirmation);
+            } else if (status != PackageInstaller.STATUS_SUCCESS) {
+                appInstallFinished(Activity.RESULT_CANCELED);
             }
+            // The one-use intent token authenticates confirmation; only Android's session callback reports success.
+        } catch (RuntimeException e) {
+            appInstallFinished(Activity.RESULT_CANCELED);
         }
     }
 
@@ -232,57 +258,27 @@ public class DummyActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == REQUEST_INSTALL_PACKAGE) {
+        if (requestCode == REQUEST_INSTALL_PACKAGE && mAwaitingUninstallResult && mBusy) {
+            mAwaitingUninstallResult = false;
             appInstallFinished(resultCode);
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (requestCode == REQUEST_PERMISSION_EXTERNAL_STORAGE) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                doStartFileShuttle();
-            } else {
-                finish();
-            }
-        } else if (requestCode == REQUEST_PERMISSION_POST_NOTIFICATIONS) {
-            // Regardless of the result, continue initialization
-            // This is fine because most functionalities will work anyway; it will just be a bit buggy
-            // and unreliable.
-            init();
+        if (requestCode == REQUEST_PERMISSION_POST_NOTIFICATIONS && mPermissionPending && mBusy) {
+            mPermissionPending = false;
+            // The command was authenticated before the permission dialog; never consume its capability twice.
+            dispatchCommand();
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
     private void actionFinalizeProvision() {
-        if (mIsProfileOwner) {
-            // Only notify the main profile on pre-Oreo
-            // After Oreo, since we use the activity-based finalization flow,
-            // the setup wizard will wait until we finish finalization before returning
-            // (Note: the actual finalization is done by common code in onCreate)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-                // This is the action used by DeviceAdminReceiver to finalize the setup
-                // The work has been finished in onCreate(), now we just have to
-                // inform the main profile about this
-                Intent intent = new Intent(FINALIZE_PROVISION);
-                // We don't need signature for this intent
-                Utility.transferIntentToProfileUnsigned(this, intent);
-                startActivity(intent);
-            }
-            finish();
-        } else {
-            // Set the flag telling MainActivity that we have now finished provisioning
-            LocalStorageManager.getInstance()
-                    .setBoolean(LocalStorageManager.PREF_HAS_SETUP, true);
-            LocalStorageManager.getInstance()
-                    .setBoolean(LocalStorageManager.PREF_IS_SETTING_UP, false);
-            Intent intent = new Intent(SetupWizardActivity.ACTION_PROFILE_PROVISIONED);
-            intent.setComponent(new ComponentName(this, SetupWizardActivity.class));
-            startActivity(intent);
-            Toast.makeText(this, getString(R.string.provision_finished), Toast.LENGTH_LONG).show();
-            finish();
-        }
+        // On API 29+, returning to Android provisioning resumes SetupWizard's availability check.
+        setResult(mIsProfileOwner ? RESULT_OK : RESULT_CANCELED);
+        finish();
     }
 
     private void actionStartService() {
@@ -291,6 +287,7 @@ public class DummyActivity extends Activity {
         ((ShelterApplication) getApplication()).bindShelterService(new ServiceConnection() {
             @Override
             public void onServiceConnected(ComponentName name, IBinder service) {
+                if (!mBusy || isFinishing() || isDestroyed()) return;
                 Intent data = new Intent();
                 Bundle bundle = new Bundle();
                 bundle.putBinder("service", service);
@@ -307,157 +304,225 @@ public class DummyActivity extends Activity {
     }
 
     private void actionInstallPackage() {
-        Uri uri = null;
-        if (getIntent().hasExtra("package")) {
-            uri = Uri.fromParts("package", getIntent().getStringExtra("package"), null);
-        }
-        StrictMode.VmPolicy policy = StrictMode.getVmPolicy();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O || getIntent().hasExtra("direct_install_apk")) {
+        try {
+            if (mIsProfileOwner) ProtectionPolicy.requireConfirmed(this);
+            Uri uri;
             if (getIntent().hasExtra("apk")) {
-                // I really have no idea about why the "package:" uri do not work
-                // after Android O, anyway we fall back to using the apk path...
-                // Since I have plan to support pre-O in later versions, I keep this
-                // branch in case that we reduce minSDK in the future.
-                uri = Uri.fromFile(new File(getIntent().getStringExtra("apk")));
-            } else if (getIntent().hasExtra("direct_install_apk")) {
-                // Directly install an APK inside the profile
-                // The APK will be an Uri from our own FileProviderProxy
-                // which points to an opened Fd in another profile.
-                // We must close the Fd when we finish.
+                String path = getIntent().getStringExtra("apk");
+                if (path == null || path.isEmpty()) throw new IOException("APK unavailable");
+                uri = Uri.fromFile(new File(path));
+            } else {
                 uri = getIntent().getParcelableExtra("direct_install_apk");
             }
-
-            // A permissive VmPolicy must be set to work around
-            // the limitation on cross-application Uri
-            StrictMode.setVmPolicy(new StrictMode.VmPolicy.Builder().build());
+            if (uri == null) throw new IOException("APK unavailable");
+            actionInstallPackageQ(uri, getIntent().getStringArrayExtra("split_apks"));
+        } catch (IOException | RuntimeException e) {
+            Toast.makeText(this, "Установка не выполнена. Проверь доступность APK и защиту рабочего профиля.", Toast.LENGTH_LONG).show();
+            appInstallFinished(RESULT_CANCELED);
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                // For Q, since we use the more "manual" method of installation,
-                // we have to also pass the split APKs ("Configuration APKs" as Google calls it)
-                // Although these are available since API 26, we don't need to
-                // take care of them for versions before Q since we don't actually
-                // install the APKs before Q.
-                actionInstallPackageQ(uri, getIntent().getStringArrayExtra("split_apks"));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        } else {
-            Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE, uri);
-            intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, getPackageName());
-            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
-            intent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivityForResult(intent, REQUEST_INSTALL_PACKAGE);
-        }
-
-        // Restore the VmPolicy anyway
-        StrictMode.setVmPolicy(policy);
     }
 
-    // On Android Q, ACTION_INSTALL_PACKAGE has been deprecated.
-    // We have to switch to using PackageInstaller for the job, which isn't quite
-    // as elegant because now we really need to read the entire apk and write to it
-    // Keep this case only for Q for now.
-    private void actionInstallPackageQ(Uri uri, String[] split_apks) throws IOException {
-        PackageInstaller pi = getPackageManager().getPackageInstaller();
-        PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
-                PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        int sessionId = pi.createSession(params);
-
-        // Show the progress dialog first
-        pi.registerSessionCallback(new InstallationProgressListener(this, pi, sessionId));
-
-        PackageInstaller.Session session = pi.openSession(sessionId);
-        doInstallPackageQ(uri, split_apks, session, () -> {
-            // We have finished piping the streams, show the progress as 10%
-            session.setStagingProgress(0.1f);
-
-            // Commit the session
-            Intent intent = new Intent(this, DummyActivity.class);
-            intent.setAction(PACKAGEINSTALLER_CALLBACK);
-            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
-                    intent, PendingIntent.FLAG_MUTABLE);
-            session.commit(pendingIntent.getIntentSender());
-        });
-    }
-
-    // The background part of the installation process on Q (reading APKs etc)
-    // that must be executed on another thread
-    // Put them in background to avoid stalling the UI thread
-    private void doInstallPackageQ(Uri baseUri, String[] split_apks, PackageInstaller.Session session, Runnable callback) {
-        ArrayList<Uri> uris = new ArrayList<>();
-        uris.add(baseUri);
-        if (split_apks != null && split_apks.length > 0) {
-            for (String apk : split_apks) {
-                uris.add(Uri.fromFile(new File(apk)));
-            }
+    private void actionInstallPackageQ(Uri baseUri, String[] splitApks) throws IOException {
+        PackageInstaller installer = getPackageManager().getPackageInstaller();
+        int sessionId = installer.createSession(new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL));
+        PackageInstaller.Session session;
+        try {
+            session = installer.openSession(sessionId);
+        } catch (IOException | RuntimeException e) {
+            installer.abandonSession(sessionId);
+            throw e;
         }
-
-        new Thread(() -> {
-            for (Uri uri : uris) {
-                try (InputStream is = getContentResolver().openInputStream(uri);
-                     OutputStream os = session.openWrite(UUID.randomUUID().toString(), 0, is.available())
-                ) {
-                    Utility.pipe(is, os);
-                    session.fsync(os);
-                } catch (IOException e) {
-
+        try {
+            InstallerCallbackGate gate = new InstallerCallbackGate(sessionId, UUID.randomUUID().toString());
+            mInstallerGate = gate;
+            SharedPreferences ledger = getSharedPreferences(INSTALL_LEDGER, MODE_PRIVATE);
+            if (ledger.getInt("session", -1) >= 0 || !ledger.edit().putInt("session", sessionId)
+                    .putString("token", gate.token).commit()) {
+                throw new IllegalStateException("Previous installation is pending");
+            }
+            mInstallerSessionCallback = new PackageInstaller.SessionCallback() {
+                @Override public void onCreated(int id) { }
+                @Override public void onBadgingChanged(int id) { }
+                @Override public void onActiveChanged(int id, boolean active) { }
+                @Override public void onProgressChanged(int id, float progress) { }
+                @Override public void onFinished(int id, boolean success) {
+                    if (id == gate.sessionId && mInstallerGate == gate && !gate.cancelled && !isDestroyed()) {
+                        appInstallFinished(success ? RESULT_OK : RESULT_CANCELED);
+                    }
                 }
-            }
-
-            runOnUiThread(callback);
-        }).start();
+            };
+            installer.registerSessionCallback(mInstallerSessionCallback, new Handler(Looper.getMainLooper()));
+            Intent result = installerResultIntent(sessionId, gate.token);
+            mInstallerResult = PendingIntent.getActivity(this, sessionId, result,
+                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_MUTABLE);
+            PendingIntent statusReceiver = mInstallerResult;
+            Toast.makeText(this, R.string.app_installing, Toast.LENGTH_SHORT).show();
+            mInstallThread = new Thread(() -> {
+                try (PackageInstaller.Session opened = session) {
+                    ArrayList<Uri> uris = new ArrayList<>();
+                    uris.add(baseUri);
+                    if (splitApks != null) {
+                        for (String path : splitApks) {
+                            if (path == null || path.isEmpty()) throw new IOException("Split APK unavailable");
+                            uris.add(Uri.fromFile(new File(path)));
+                        }
+                    }
+                    for (int i = 0; i < uris.size(); i++) {
+                        requireInstallActive(gate);
+                        try (InputStream input = getContentResolver().openInputStream(uris.get(i))) {
+                            if (input == null) throw new IOException("APK unavailable");
+                            try (OutputStream output = opened.openWrite(i == 0 ? "base.apk" : "split-" + i + ".apk", 0, -1)) {
+                                copyApk(input, output, gate);
+                                opened.fsync(output);
+                            }
+                        }
+                    }
+                    requireInstallActive(gate);
+                    if (mIsProfileOwner) ProtectionPolicy.requireConfirmed(this);
+                    opened.setStagingProgress(0.1f);
+                    opened.commit(statusReceiver.getIntentSender());
+                } catch (IOException | RuntimeException e) {
+                    gate.cancel();
+                    try { installer.abandonSession(sessionId); } catch (RuntimeException ignored) { }
+                    runOnUiThread(() -> {
+                        if (mInstallerGate == gate) appInstallFinished(RESULT_CANCELED);
+                    });
+                }
+            }, "Pocket APK install");
+            mInstallThread.start();
+        } catch (RuntimeException e) {
+            try { session.abandon(); } catch (RuntimeException ignored) { }
+            session.close();
+            throw e;
+        }
     }
 
     private void actionUninstallPackage() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            actionUninstallPackageQ();
-            return;
-        }
-
+        if (!mIsProfileOwner) { appInstallFinished(RESULT_CANCELED); return; }
+        // Activity results are delivered by Android directly, without an exported status-intent endpoint.
         Uri uri = Uri.fromParts("package", getIntent().getStringExtra("package"), null);
         Intent intent = new Intent(Intent.ACTION_UNINSTALL_PACKAGE, uri);
         intent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-        // Currently, Install & Uninstall share the same logic
-        // after starting the system PackageInstaller
-        // because the only thing to do is to call the callback
-        // with the result code.
-        // If ANY separate logic is added for any of them,
-        // the request code should be separated.
-        startActivityForResult(intent, REQUEST_INSTALL_PACKAGE);
-    }
-
-    private void actionUninstallPackageQ() {
-        PackageInstaller pi = getPackageManager().getPackageInstaller();
-        Intent intent = new Intent(this, DummyActivity.class);
-        intent.setAction(PACKAGEINSTALLER_CALLBACK);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0,
-                intent, PendingIntent.FLAG_MUTABLE);
-        pi.uninstall(getIntent().getStringExtra("package"), pendingIntent.getIntentSender());
+        try {
+            mAwaitingUninstallResult = true;
+            startActivityForResult(intent, REQUEST_INSTALL_PACKAGE);
+        } catch (RuntimeException e) {
+            mAwaitingUninstallResult = false;
+            appInstallFinished(RESULT_CANCELED);
+        }
     }
 
     private void appInstallFinished(int resultCode) {
-        // Clear the fd anyway since we have finished installation.
-        // Because we might have been installing an APK opened from
-        // the other profile. We don't know, but just clean it.
-        FileProviderProxy.clearForwardProxy();
-
-        if (!getIntent().hasExtra("callback")) return;
-
-        // Send the result code back to the caller
-        Bundle callbackExtra = getIntent().getBundleExtra("callback");
-        IAppInstallCallback callback = IAppInstallCallback.Stub
-                .asInterface(callbackExtra.getBinder("callback"));
-
-        try {
-            callback.callback(resultCode);
-        } catch (RemoteException e) {
-            // do nothing
-        }
-
+        if (mCompletionSent) return;
+        cleanupInstall(resultCode != RESULT_OK);
+        mCompletionSent = true;
+        notifyInstallCallback(mOperationCallback, resultCode);
         finish();
+    }
+
+    private static void requireInstallActive(InstallerCallbackGate gate) throws IOException {
+        if (gate.cancelled || Thread.currentThread().isInterrupted()) throw new IOException("Installation cancelled");
+    }
+
+    private static void copyApk(InputStream input, OutputStream output, InstallerCallbackGate gate) throws IOException {
+        byte[] buffer = new byte[65536];
+        while (true) {
+            requireInstallActive(gate);
+            int count = input.read(buffer);
+            if (count == -1) return;
+            requireInstallActive(gate);
+            output.write(buffer, 0, count);
+        }
+    }
+
+    private Intent installerResultIntent(int sessionId, String token) {
+        return new Intent(this, DummyActivity.class).setAction(PACKAGEINSTALLER_CALLBACK)
+                .setData(Uri.parse("pocket-install://session/" + sessionId + "/" + token))
+                .putExtra("_pocket_install_token", token).putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
+    }
+
+    private boolean abandonRecordedInstall() {
+        SharedPreferences ledger = getSharedPreferences(INSTALL_LEDGER, MODE_PRIVATE);
+        int sessionId = ledger.getInt("session", -1);
+        String token = ledger.getString("token", "");
+        PackageInstaller installer = getPackageManager().getPackageInstaller();
+        // Dummy is this app's only session owner; this also covers death between createSession and ledger commit.
+        List<PackageInstaller.SessionInfo> sessions = installer.getMySessions();
+        boolean recovered = sessionId >= 0 || !sessions.isEmpty();
+        for (PackageInstaller.SessionInfo session : sessions) {
+            try { installer.abandonSession(session.getSessionId()); }
+            catch (RuntimeException e) {
+                if (installer.getSessionInfo(session.getSessionId()) != null) throw e;
+            }
+        }
+        if (sessionId >= 0) {
+            PendingIntent result = PendingIntent.getActivity(this, sessionId, installerResultIntent(sessionId, token),
+                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_MUTABLE);
+            if (result != null) result.cancel();
+        }
+        if (!ledger.edit().clear().commit()) throw new IllegalStateException("Installation cleanup unavailable");
+        if (recovered) FileProviderProxy.clearForwardProxy();
+        return recovered;
+    }
+
+    private void cleanupInstall(boolean cancel) {
+        InstallerCallbackGate gate = mInstallerGate;
+        mInstallerGate = null;
+        boolean abandoned = !cancel;
+        if (gate != null) {
+            gate.cancel();
+            if (cancel) {
+                if (mInstallThread != null) mInstallThread.interrupt();
+                try {
+                    getPackageManager().getPackageInstaller().abandonSession(gate.sessionId);
+                    abandoned = true;
+                } catch (RuntimeException ignored) {
+                    // Keep the private ledger so the next creation retries cleanup.
+                }
+            }
+            SharedPreferences ledger = getSharedPreferences(INSTALL_LEDGER, MODE_PRIVATE);
+            if (abandoned && gate.sessionId == ledger.getInt("session", -1)
+                    && gate.token.equals(ledger.getString("token", null))) ledger.edit().clear().commit();
+        }
+        mInstallThread = null;
+        if (mInstallerResult != null) mInstallerResult.cancel();
+        mInstallerResult = null;
+        if (mInstallerSessionCallback != null) {
+            try { getPackageManager().getPackageInstaller().unregisterSessionCallback(mInstallerSessionCallback); }
+            catch (RuntimeException ignored) { }
+            mInstallerSessionCallback = null;
+        }
+        if (gate != null || INSTALL_PACKAGE.equals(getIntent().getAction())) FileProviderProxy.clearForwardProxy();
+    }
+
+    private static void notifyInstallCallback(Bundle extra, int resultCode) {
+        if (extra != null) {
+            IAppInstallCallback callback = IAppInstallCallback.Stub.asInterface(extra.getBinder("callback"));
+            if (callback != null) {
+                try { callback.callback(resultCode); } catch (RemoteException | RuntimeException ignored) { }
+            }
+        }
+    }
+
+    @Override protected void onSaveInstanceState(@NonNull Bundle state) {
+        state.putBoolean(STATE_BUSY, mBusy);
+        if (mBusy && mOperationCallback != null) state.putBundle(STATE_CALLBACK, mOperationCallback);
+        super.onSaveInstanceState(state);
+    }
+
+    @Override public void finish() {
+        mBusy = false;
+        super.finish();
+    }
+
+    @Override protected void onDestroy() {
+        cleanupInstall(true);
+        if (isFinishing() && !mCompletionSent && mOperationCallback != null) {
+            mCompletionSent = true;
+            notifyInstallCallback(mOperationCallback, RESULT_CANCELED);
+        }
+        mBusy = false;
+        super.onDestroy();
     }
 
     private void actionUnfreezeAndLaunch() {
@@ -468,152 +533,67 @@ public class DummyActivity extends Activity {
         if (!mIsProfileOwner) {
             // Forward it to work profile
             Intent intent = new Intent(UNFREEZE_AND_LAUNCH);
-            Utility.transferIntentToProfile(this, intent);
             String packageName = getIntent().getStringExtra("packageName");
             intent.putExtra("packageName", packageName);
-            intent.putExtra("shouldFreeze",
-                    SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
-                            LocalStorageManager.getInstance()
-                                .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packageName));
+            long serial = getIntent().getLongExtra("profileSerial", -1);
+            if (serial < 0) { finish(); return; }
+            intent.putExtra("profileSerial", serial);
             if (getIntent().hasExtra("linkedPackages")) {
-                // Multiple apps should be unfrozen here
-                String[] packages = getIntent().getStringExtra("linkedPackages").split(",");
-                boolean[] packagesShouldFreeze = new boolean[packages.length];
-
-                for (int i = 0; i < packages.length; i++) {
-                    // Apps in linkedPackages may also need to be auto-frozen
-                    // thus, we loop through them and fetch the settings
-                    packagesShouldFreeze[i] = SettingsManager.getInstance().getAutoFreezeServiceEnabled() &&
-                            LocalStorageManager.getInstance()
-                                    .stringListContains(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, packages[i]);
-                }
+                String[] packages = getIntent().getStringArrayExtra("linkedPackages");
                 intent.putExtra("linkedPackages", packages);
-                intent.putExtra("linkedPackagesShouldFreeze", packagesShouldFreeze);
             }
-            startActivity(intent);
+            try {
+                Utility.transferIntentToProfile(this, intent);
+                startActivity(intent);
+            } catch (RuntimeException e) {
+                Toast.makeText(this, "Рабочий профиль недоступен. Личная копия не запускается.", Toast.LENGTH_LONG).show();
+            }
             finish();
             return;
         }
 
-        // If we have multiple linked apps to unfreeze before launching the main one
-        if (getIntent().hasExtra("linkedPackages")) {
-            String[] packages = getIntent().getStringArrayExtra("linkedPackages");
-            boolean[] packagesShouldFreeze = getIntent().getBooleanArrayExtra("linkedPackagesShouldFreeze");
-
-            for (int i = 0; i < packages.length; i++) {
-                // Unfreeze everything
-                mPolicyManager.setApplicationHidden(
-                        new ComponentName(this, ShelterDeviceAdminReceiver.class),
-                        packages[i], false);
-                // Register freeze service
-                if (packagesShouldFreeze[i]) {
-                    registerAppToFreeze(packages[i]);
-                }
-            }
+        long serial = getSystemService(UserManager.class).getSerialNumberForUser(Process.myUserHandle());
+        if (serial < 0 || serial != getIntent().getLongExtra("profileSerial", -1)) {
+            Toast.makeText(this, "Ярлык относится к другому рабочему профилю. Пересоздай его в Pocket.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+        try {
+            ProtectionPolicy.requireConfirmed(this);
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "Сначала настрой защиту рабочего профиля в Pocket.", Toast.LENGTH_LONG).show();
+            finish();
+            return;
         }
 
-        // Here is the main package to launch
         String packageName = getIntent().getStringExtra("packageName");
-
-        // Unfreeze the app first
-        mPolicyManager.setApplicationHidden(
-                new ComponentName(this, ShelterDeviceAdminReceiver.class),
-                packageName, false);
-
-        // Query the start intent
-        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
-
-        if (launchIntent != null) {
-            if (getIntent().getBooleanExtra("shouldFreeze", false)) {
-                registerAppToFreeze(packageName);
+        ArrayList<String> packages = new ArrayList<>();
+        packages.add(packageName);
+        String[] linked = getIntent().getStringArrayExtra("linkedPackages");
+        if (linked != null) packages.addAll(Arrays.asList(linked));
+        try {
+            for (String name : packages) {
+                android.content.pm.ApplicationInfo info = getPackageManager().getApplicationInfo(name,
+                        PackageManager.MATCH_UNINSTALLED_PACKAGES | PackageManager.MATCH_DISABLED_COMPONENTS);
+                if ((info.flags & android.content.pm.ApplicationInfo.FLAG_INSTALLED) == 0
+                        || !android.os.UserHandle.getUserHandleForUid(info.uid).equals(Process.myUserHandle())) {
+                    throw new IllegalArgumentException("Рабочая копия отсутствует");
+                }
+            }
+            for (String name : packages) {
+                mPolicyManager.setApplicationHidden(new ComponentName(this, ShelterDeviceAdminReceiver.class), name, false);
+            }
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(packageName);
+            if (launchIntent == null || launchIntent.getComponent() == null
+                    || !packageName.equals(launchIntent.getComponent().getPackageName())) {
+                throw new IllegalArgumentException("Рабочая копия не запускается");
             }
             startActivity(launchIntent);
-        } else {
-            // Acknowledge the user that the application cannot be launched
-            Toast.makeText(this, getString(R.string.launch_app_fail, packageName), Toast.LENGTH_SHORT).show();
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            Toast.makeText(this, "Рабочая копия недоступна. Открой Pocket и пересоздай ярлык.", Toast.LENGTH_LONG).show();
         }
 
         finish();
-    }
-
-    private void registerAppToFreeze(String packageName) {
-        FreezeService.registerAppToFreeze(packageName);
-        startService(new Intent(this, FreezeService.class));
-    }
-
-    private void actionPublicFreezeAll() {
-        // For now we only support freezing apps in work profile
-        // so forward this to DummyActivity in work profile
-        // after loading the full list to freeze
-        if (!mIsProfileOwner) {
-            Intent intent = new Intent(FREEZE_ALL_IN_LIST);
-            Utility.transferIntentToProfile(this, intent);
-            String[] list = LocalStorageManager.getInstance()
-                    .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE);
-            intent.putExtra("list", list);
-            startActivity(intent);
-            finish();
-        } else {
-            throw new RuntimeException("unimplemented");
-        }
-    }
-
-    private void actionFreezeAllInList() {
-        if (mIsProfileOwner) {
-            String[] list = getIntent().getStringArrayExtra("list");
-            for (String pkg : list) {
-                mPolicyManager.setApplicationHidden(
-                        new ComponentName(this, ShelterDeviceAdminReceiver.class),
-                        pkg, true);
-            }
-            stopService(new Intent(this, FreezeService.class)); // Stop the auto-freeze service
-            Toast.makeText(this, R.string.freeze_all_success, Toast.LENGTH_SHORT).show();
-            finish();
-        } else {
-            finish();
-        }
-    }
-
-    private void actionStartFileShuttle() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            // This requires the permission WRITE_EXTERNAL_STORAGE
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                doStartFileShuttle();
-            } else {
-                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_PERMISSION_EXTERNAL_STORAGE);
-            }
-        } else {
-            // The all file access permission should have been granted when enabling File Shuttle
-            // since Android R.
-            if (Utility.checkAllFileAccessPermission() && Utility.checkSystemAlertPermission(this)) {
-                doStartFileShuttle();
-            } else {
-                finish();
-            }
-        }
-    }
-
-    private void doStartFileShuttle() {
-        ((ShelterApplication) getApplication()).bindFileShuttleService(new ServiceConnection() {
-            @Override
-            public void onServiceConnected(ComponentName name, IBinder service) {
-                IFileShuttleService shuttle = IFileShuttleService.Stub.asInterface(service);
-                IFileShuttleServiceCallback callback = IFileShuttleServiceCallback.Stub.asInterface(
-                        getIntent().getBundleExtra("extra").getBinder("callback"));
-                try {
-                    callback.callback(shuttle);
-                } catch (RemoteException e) {
-                    // Do Nothing
-                }
-
-                finish();
-            }
-
-            @Override
-            public void onServiceDisconnected(ComponentName name) {
-                // Do Nothing
-            }
-        });
     }
 
     private void actionSynchronizePreference() {
@@ -626,7 +606,6 @@ public class DummyActivity extends Activity {
                     .setInt(name, getIntent().getIntExtra("int", Integer.MIN_VALUE));
         }
         // TODO: Cases for other types
-        SettingsManager.getInstance().applyAll();
         if (mIsProfileOwner) {
             // Refresh profile policies because
             // settings may have been changed

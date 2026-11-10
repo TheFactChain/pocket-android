@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pocket_licenses">Licenses and authors</string>
+    <string name="pocket_licenses_error">Could not open bundled licenses.</string>
+    <string name="pocket_help">How to use Pocket</string>
+    <string name="pocket_help_text">1. Open Connections and select a server. Wait for a confirmed connection.\n\n2. On the Personal tab, tap an app and choose Clone to Pocket. Its work copy starts with separate data.\n\n3. On the Pocket tab, tap a work app to launch it or add its home screen shortcut.\n\nThe connection continues after closing Pocket. Without a connection, the system blocks the work profile. Pausing the work profile also pauses its apps and notifications.\n\nRemoving a work copy deletes its work data. The personal copy remains.</string>
+</resources>

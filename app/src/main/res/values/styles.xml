@@ -1,48 +1,232 @@
 <resources>
-    <!-- Base application theme. -->
-    <style name="AppTheme.Base" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
-        <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">@color/colorPrimary</item>
-        <item name="colorAccent">@color/colorAccent</item>
-        <item name="colorOnPrimary">@color/colorTextPrimary</item>
-        <item name="windowActionModeOverlay">true</item>
+    <!-- Light only, like Pocket Windows -->
+    <style name="AppTheme.Base" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryVariant">@color/accent_deep</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorOnSecondary">@android:color/white</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="colorControlActivated">@color/accent</item>
+        <item name="android:colorBackground">@color/page</item>
+        <item name="android:windowBackground">@color/page</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:textColorHint">@color/hint</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:colorBackground">@color/colorPrimary</item>
-        <item name="android:textColor">@color/colorTextPrimary</item>
-        <item name="android:textColorSecondary">@color/colorTextSecondary</item>
-        <item name="android:itemBackground">@color/colorPrimary</item>
-        <item name="android:listViewStyle">@style/ListViewTheme</item>
-        <item name="android:alertDialogTheme">@style/AlertDialogTheme</item>
+        <item name="windowActionModeOverlay">true</item>
+        <item name="bottomSheetDialogTheme">@style/PocketSheetDialog</item>
+        <item name="alertDialogTheme">@style/PocketAlert</item>
+        <item name="materialAlertDialogTheme">@style/PocketAlert</item>
     </style>
 
-    <style name="AppTheme.Override" parent="AppTheme.Base">
-        <!-- Empty; override from specific styles -->
+    <style name="AppTheme.Override" parent="AppTheme.Base" />
+
+    <style name="AppTheme" parent="AppTheme.Override" />
+
+    <style name="PocketAlert" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="shapeAppearanceOverlay">@style/PocketAlertShape</item>
+        <item name="android:background">@color/group</item>
     </style>
 
-    <style name="AppTheme" parent="AppTheme.Override">
-        <!-- Empty; override from specific styles -->
+    <style name="PocketAlertShape">
+        <item name="cornerSize">16dp</item>
     </style>
 
-    <!-- Themes for dialogs and context menus -->
-    <style name="ListViewTheme" parent="@android:style/Widget.ListView">
-        <item name="android:background">@color/colorPrimary</item>
+    <!-- Modal card: the page colour with rounded top, as the Windows sheet -->
+    <style name="PocketSheetDialog" parent="ThemeOverlay.MaterialComponents.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/PocketSheet</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:backgroundDimAmount">0.35</item>
     </style>
 
-    <style name="AlertDialogTheme" parent="Theme.AppCompat.DayNight.Dialog.Alert">
-        <item name="android:background">@color/colorPrimary</item>
-        <item name="android:headerBackground">@color/colorPrimary</item>
-        <item name="android:windowTitleStyle">@style/AlertDialogTitleTextStyle</item>
+    <style name="PocketSheet" parent="Widget.MaterialComponents.BottomSheet.Modal">
+        <item name="backgroundTint">@color/page</item>
+        <item name="shapeAppearanceOverlay">@style/PocketSheetShape</item>
+        <!-- Keep the round top when a sheet opens fully expanded -->
+        <item name="shouldRemoveExpandedCorners">false</item>
     </style>
 
-    <style name="AlertDialogTitleTextStyle" parent="TextAppearance.AppCompat.Title">
-        <item name="android:background">@color/colorPrimary</item>
+    <style name="PocketSheetShape">
+        <item name="cornerSizeTopLeft">28dp</item>
+        <item name="cornerSizeTopRight">28dp</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
     </style>
 
-    <!-- Theme for ActionBar -->
-    <!-- Display the text as accent color -->
+    <!-- Text styles from App.xaml -->
+    <style name="Caption">
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:textColor">@color/muted</item>
+    </style>
+
+    <style name="RowText">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <style name="PageTitle">
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/ink</item>
+    </style>
+
+    <style name="Group">
+        <item name="android:background">@drawable/bg_group</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:layout_marginBottom">22dp</item>
+    </style>
+
+    <style name="Separator">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginStart">56dp</item>
+        <item name="android:background">@color/line</item>
+    </style>
+
+    <style name="FormRule">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:background">@color/line</item>
+    </style>
+
+    <!-- Big rounded main action -->
+    <style name="Pill">
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:background">@drawable/bg_pill_accent</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:stateListAnimator">@animator/tap</item>
+    </style>
+
+    <style name="Pill.Deep">
+        <item name="android:background">@drawable/bg_pill_deep</item>
+    </style>
+
+    <style name="Pill.Soft">
+        <item name="android:background">@drawable/bg_pill_soft</item>
+        <item name="android:textColor">@color/blue_ink</item>
+    </style>
+
+    <style name="Pill.Danger">
+        <item name="android:background">@drawable/bg_pill_danger</item>
+        <item name="android:textColor">@color/danger</item>
+    </style>
+
+    <!-- One-screen home: big bold headline and bento card texts -->
+    <style name="Headline">
+        <item name="android:textSize">30sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:letterSpacing">-0.02</item>
+        <item name="android:lineSpacingMultiplier">0.95</item>
+    </style>
+
+    <style name="CardLabel">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/card_ink_soft</item>
+    </style>
+
+    <style name="CardValue">
+        <item name="android:textSize">26sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:letterSpacing">-0.02</item>
+    </style>
+
+    <style name="TextAction">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textSize">14.5sp</item>
+        <item name="android:textColor">@color/accent</item>
+        <item name="android:background">@drawable/bg_text_action</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="StatusPill">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">10dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:textSize">12.5sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:background">@drawable/bg_capsule</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- Form in a group: label on the left, plain text right after it -->
+    <style name="FormLabel" parent="RowText">
+        <item name="android:layout_width">104dp</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
+
+    <style name="FormField">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:background">@null</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorHint">@color/hint</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textCursorDrawable">@drawable/cursor</item>
+    </style>
+
+    <style name="FormLine">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="Field">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">44dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:background">@drawable/bg_field</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorHint">@color/hint</item>
+        <item name="android:textCursorDrawable">@drawable/cursor</item>
+    </style>
+
+    <style name="Seg">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">13.5sp</item>
+        <item name="android:textColor">@color/seg_text</item>
+        <item name="android:background">@drawable/bg_seg</item>
+        <item name="android:button">@null</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
     <style name="ToolbarTheme" parent="ThemeOverlay.AppCompat.ActionBar">
-        <item name="android:textColorPrimary">@color/colorAccent</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="colorControlNormal">@color/accent</item>
     </style>
 
     <!-- For DummyActivity -->

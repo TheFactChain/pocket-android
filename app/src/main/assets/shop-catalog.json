@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "updated": 0,
+  "products": [
+    { "id": "chatgpt-plus", "title": "ChatGPT Plus", "description": "Оформим на твой аккаунт", "price_rub": 2000, "delivery": "", "icon": "Bot24" },
+    { "id": "chatgpt-go", "title": "ChatGPT Go", "description": "Оформим на твой аккаунт", "price_rub": 550, "delivery": "", "icon": "Bot24" },
+    { "id": "claude-pro", "title": "Claude Pro", "description": "Оформим на твой аккаунт", "price_rub": 2000, "delivery": "", "icon": "claude" },
+    { "id": "proxy", "title": "Proxy", "description": "Личный, настроен, с поддержкой", "price_rub": 900, "delivery": "", "icon": "ShieldLock24" },
+    { "id": "windows-11-pro", "title": "Ключ Windows 11 Pro", "description": "Ключ и инструкция, лицензия Windows не входит", "price_rub": 150, "delivery": "", "icon": "" }
+  ]
+}

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pc_scan_prompt">Point the camera at a connection QR code. Use Back to cancel.</string>
+</resources>

@@ -80,3 +80,21 @@ fastlane/readme.md
 # temporary google play repackaging tool
 repackage/*
 !repackage/repackage.sh
+
+# Local Pocket tooling, signing material, evidence and task database
+/.tools/
+/.local/
+/.artifacts/
+/.beads/
+/.beads.gate.lock
+*.jks
+*.keystore
+/signing.properties
+/app/libs/*.aar
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft press and an unhurried release, as the Windows buttons (scale 0.965) -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <set>
+            <objectAnimator android:propertyName="scaleX" android:valueTo="0.965" android:duration="160" android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator android:propertyName="scaleY" android:valueTo="0.965" android:duration="160" android:interpolator="@android:interpolator/decelerate_cubic" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator android:propertyName="scaleX" android:valueTo="1" android:duration="300" android:interpolator="@android:interpolator/decelerate_cubic" />
+            <objectAnimator android:propertyName="scaleY" android:valueTo="1" android:duration="300" android:interpolator="@android:interpolator/decelerate_cubic" />
+        </set>
+    </item>
+</selector>

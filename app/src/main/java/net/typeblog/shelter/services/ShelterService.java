@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 public class ShelterService extends Service {
     public static final int RESULT_CANNOT_INSTALL_SYSTEM_APP = 100001;
     public static final int RESULT_PROTECTION_REQUIRED = 100002;
+    /** Android refused the copy: not enough free storage on the phone. */
+    public static final int RESULT_NO_SPACE = 100003;
 
     private static final int NOTIFICATION_ID = 0x49a11;
     private DevicePolicyManager mPolicyManager = null;

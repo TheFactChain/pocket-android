@@ -245,6 +245,8 @@ public class DummyActivity extends Activity {
                 Intent confirmation = intent.getParcelableExtra(Intent.EXTRA_INTENT);
                 if (confirmation == null) throw new IllegalArgumentException("Нет подтверждения установки");
                 startActivity(confirmation);
+            } else if (status == PackageInstaller.STATUS_FAILURE_STORAGE) {
+                appInstallFinished(net.typeblog.shelter.services.ShelterService.RESULT_NO_SPACE);
             } else if (status != PackageInstaller.STATUS_SUCCESS) {
                 appInstallFinished(Activity.RESULT_CANCELED);
             }

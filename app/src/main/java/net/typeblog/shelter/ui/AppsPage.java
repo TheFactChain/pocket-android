@@ -336,7 +336,9 @@ final class AppsPage extends Page {
                     } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {
                         a.toast(install ? "Системное приложение нельзя скопировать." : "Системную копию нельзя удалить.");
                     } else if (result == ShelterService.RESULT_PROTECTION_REQUIRED) {
-                        a.toast("Сначала включи защиту: открой «Проверка».");
+                        a.toast("Сначала включи защиту: нажми карточку «Прокси».");
+                    } else if (result == ShelterService.RESULT_NO_SPACE) {
+                        a.toast("На телефоне мало места. Освободи память и повтори.");
                     } else {
                         a.toast(install ? "Копирование не выполнено или отменено." : "Удаление не выполнено или отменено.");
                     }

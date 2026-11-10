@@ -32,11 +32,15 @@ final class UpdatesPage extends Page {
 
     @Override String title() { return "Обновления"; }
 
+    private static boolean cleaned;
+
     private static String feed() { return BuildConfig.DEBUG ? AppUpdater.DEBUG_FEED : AppUpdater.FEED; }
 
     /** Quiet check after linking: only sets the «Доступно» pill on the home row. */
     static void checkInBackground(MainActivity a) {
         a.worker.execute(() -> {
+            // Once per process, before any download can start here: the APK of an applied update only takes space.
+            if (!cleaned) { cleaned = true; new File(new File(a.getCacheDir(), "update"), "update.apk").delete(); }
             try {
                 AppUpdater.Manifest m = AppUpdater.fetchManifest(feed(), BuildConfig.DEBUG);
                 boolean newer = AppUpdater.isNewer(m, BuildConfig.VERSION_CODE);

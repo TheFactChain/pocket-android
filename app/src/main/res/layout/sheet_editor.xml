@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Manual editor: iOS form. Label on the left, plain text right after it, hints inside empty fields -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="18dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="18dp"
+    android:paddingBottom="16dp">
+
+    <include layout="@layout/view_sheet_header" />
+
+    <LinearLayout
+        style="@style/Group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <LinearLayout style="@style/FormLine">
+            <TextView style="@style/FormLabel" android:labelFor="@id/edit_name" android:text="Название" />
+            <EditText android:id="@+id/edit_name" style="@style/FormField" android:hint="например, Мой Proxy"
+                android:importantForAutofill="no" android:inputType="textCapSentences" />
+        </LinearLayout>
+
+        <View style="@style/FormRule" />
+
+        <LinearLayout style="@style/FormLine" android:paddingTop="6dp" android:paddingBottom="6dp">
+            <TextView style="@style/FormLabel" android:layout_width="56dp" android:text="Тип" />
+            <RadioGroup
+                android:id="@+id/edit_type"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_seg_track"
+                android:orientation="horizontal"
+                android:padding="2dp">
+
+                <RadioButton android:id="@+id/type_hysteria2" style="@style/Seg" android:text="Hysteria2" android:contentDescription="Hysteria2, TCP и UDP" />
+                <RadioButton android:id="@+id/type_socks5" style="@style/Seg" android:text="SOCKS5" android:contentDescription="SOCKS5, только TCP" />
+                <RadioButton android:id="@+id/type_http" style="@style/Seg" android:text="HTTP" android:contentDescription="HTTP, только TCP" />
+                <RadioButton android:id="@+id/type_https" style="@style/Seg" android:text="HTTPS" android:contentDescription="HTTPS CONNECT, только TCP" />
+            </RadioGroup>
+        </LinearLayout>
+
+        <View style="@style/FormRule" />
+
+        <LinearLayout style="@style/FormLine">
+            <TextView style="@style/FormLabel" android:labelFor="@id/edit_host" android:text="Сервер" />
+            <EditText android:id="@+id/edit_host" style="@style/FormField" android:hint="адрес или IP"
+                android:importantForAutofill="no" android:inputType="textUri|textNoSuggestions" />
+            <TextView style="@style/Caption" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:layout_marginEnd="6dp" android:labelFor="@id/edit_port" android:text="порт" />
+            <EditText android:id="@+id/edit_port" style="@style/FormField" android:layout_width="60dp"
+                android:layout_weight="0" android:gravity="end|center_vertical" android:hint="443"
+                android:importantForAutofill="no" android:inputType="number" android:maxLength="5" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/sni_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <View style="@style/FormRule" />
+            <LinearLayout style="@style/FormLine">
+                <TextView style="@style/FormLabel" android:labelFor="@id/edit_sni" android:text="Имя TLS" />
+                <EditText android:id="@+id/edit_sni" style="@style/FormField" android:hint="необязательно"
+                    android:importantForAutofill="no" android:inputType="textUri|textNoSuggestions" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/auth_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <View style="@style/FormRule" />
+            <LinearLayout style="@style/FormLine">
+                <TextView style="@style/FormLabel" android:labelFor="@id/edit_auth" android:text="Пароль" />
+                <EditText android:id="@+id/edit_auth" style="@style/FormField" android:hint="пароль от сервера"
+                    android:importantForAutofill="no" android:inputType="textPassword" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/hysteria_rows" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <View style="@style/FormRule" />
+            <LinearLayout style="@style/FormLine">
+                <TextView style="@style/RowText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Маскировка Salamander" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/edit_obfs" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="Маскировка Salamander" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/obfs_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <View style="@style/FormRule" />
+                <LinearLayout style="@style/FormLine">
+                    <TextView style="@style/FormLabel" android:labelFor="@id/edit_obfs_password" android:text="Пароль" />
+                    <EditText android:id="@+id/edit_obfs_password" style="@style/FormField" android:hint="пароль маскировки"
+                        android:importantForAutofill="no" android:inputType="textPassword" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/proxy_rows" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+            <View style="@style/FormRule" />
+            <LinearLayout style="@style/FormLine">
+                <TextView style="@style/RowText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Вход по логину и паролю" />
+                <com.google.android.material.switchmaterial.SwitchMaterial android:id="@+id/edit_login" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="Вход по логину и паролю" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/login_rows" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <View style="@style/FormRule" />
+                <LinearLayout style="@style/FormLine">
+                    <TextView style="@style/FormLabel" android:labelFor="@id/edit_user" android:text="Логин" />
+                    <EditText android:id="@+id/edit_user" style="@style/FormField" android:importantForAutofill="no" android:inputType="text|textNoSuggestions" />
+                </LinearLayout>
+                <View style="@style/FormRule" />
+                <LinearLayout style="@style/FormLine">
+                    <TextView style="@style/FormLabel" android:labelFor="@id/edit_password" android:text="Пароль" />
+                    <EditText android:id="@+id/edit_password" style="@style/FormField" android:hint="пароль прокси"
+                        android:importantForAutofill="no" android:inputType="textPassword" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/edit_caption"
+        style="@style/Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/edit_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginBottom="10dp"
+        android:textColor="@color/danger"
+        android:textSize="13sp"
+        android:visibility="gone"
+        android:accessibilityLiveRegion="polite" />
+
+    <TextView
+        android:id="@+id/edit_save"
+        style="@style/Pill"
+        android:layout_width="match_parent"
+        android:text="Сохранить и использовать" />
+
+    <LinearLayout
+        android:id="@+id/edit_extras"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="-8dp"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/edit_test" style="@style/TextAction" android:text="Проверить" />
+        <TextView android:id="@+id/edit_export" style="@style/TextAction" android:text="Экспорт" />
+        <TextView android:id="@+id/edit_delete" style="@style/TextAction" android:text="Удалить" android:textColor="@color/danger" />
+    </LinearLayout>
+</LinearLayout>

@@ -26,6 +26,7 @@ import android.widget.TextView;
 import com.android.setupwizardlib.SetupWizardLayout;
 import com.android.setupwizardlib.view.NavigationBar;
 
+import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver;
 import net.typeblog.shelter.util.AuthenticationUtility;
@@ -37,8 +38,8 @@ public class SetupWizardActivity extends AppCompatActivity {
     // finished by the system, but the Shelter inside the profile has never been brought up
     // due to the user having not clicked on the notification yet (on Android 7 or lower).
     // TODO: When we remove support for Android 7, get rid of all of these nonsense :)
-    public static final String ACTION_RESUME_SETUP = "net.typeblog.shelter.RESUME_SETUP";
-    public static final String ACTION_PROFILE_PROVISIONED = "net.typeblog.shelter.PROFILE_PROVISIONED";
+    public static final String ACTION_RESUME_SETUP = BuildConfig.APPLICATION_ID + ".RESUME_SETUP";
+    public static final String ACTION_PROFILE_PROVISIONED = BuildConfig.APPLICATION_ID + ".PROFILE_PROVISIONED";
 
     private DevicePolicyManager mPolicyManager = null;
     private LocalStorageManager mStorage = null;
@@ -276,6 +277,9 @@ public class SetupWizardActivity extends AppCompatActivity {
         @Override
         public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
             super.onViewCreated(view, savedInstanceState);
+            TextView text = view.findViewById(R.id.setup_wizard_generic_text);
+            text.setText(android.text.TextUtils.concat(getString(R.string.pocket_network_warning),
+                    "\n\n", text.getText()));
             mWizard.setHeaderText(R.string.setup_wizard_welcome);
             mWizard.getNavigationBar().getBackButton().setVisibility(View.GONE);
         }

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Add: paste a link once -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="18dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="18dp"
+    android:paddingBottom="16dp">
+
+    <include layout="@layout/view_sheet_header" />
+
+    <LinearLayout
+        style="@style/Group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:padding="16dp">
+
+        <TextView
+            style="@style/Caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginBottom="5dp"
+            android:labelFor="@id/link_input"
+            android:text="Ссылка от сервера" />
+
+        <EditText
+            android:id="@+id/link_input"
+            style="@style/Field"
+            android:importantForAutofill="no"
+            android:inputType="textUri|textNoSuggestions"
+            android:maxLines="3"
+            android:imeOptions="actionDone" />
+
+        <TextView
+            style="@style/Caption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="2dp"
+            android:layout_marginTop="6dp"
+            android:text="hysteria2://, socks5://, http:// или https://, как выдал бот или панель" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/add_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:layout_marginEnd="4dp"
+        android:layout_marginBottom="10dp"
+        android:textColor="@color/danger"
+        android:visibility="gone"
+        android:accessibilityLiveRegion="polite" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="-8dp"
+        android:layout_marginBottom="8dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/add_file" style="@style/TextAction" android:text="Из файла" />
+        <TextView android:id="@+id/add_qr" style="@style/TextAction" android:text="QR-код" />
+        <TextView android:id="@+id/add_manual" style="@style/TextAction" android:text="Ввести вручную" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/add_button"
+        style="@style/Pill"
+        android:layout_width="match_parent"
+        android:text="Добавить" />
+</LinearLayout>

@@ -1,63 +1,41 @@
 apply plugin: 'com.android.application'
 
-repositories {
-    //noinspection JcenterRepositoryObsolete
-    jcenter {
-        content {
-            includeVersion "mobi.upod", "time-duration-picker", "1.1.3"
-        }
-    }
+def pocketSigning = new Properties()
+def pocketSigningFile = rootProject.file('.local/signing/signing.properties')
+if (!pocketSigningFile.exists()) {
+    throw new GradleException('Сначала выполни tools/Setup.ps1 для подготовки локальной подписи.')
 }
-
-def getVersionCode = { ->
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            commandLine 'git', 'rev-list', '--first-parent', '--count', 'master'
-            standardOutput = stdout
-        }
-        return Integer.parseInt(stdout.toString().trim())
-    }
-    catch (ignored) {
-        return -1;
-    }
-}
-
-def getVersionName = { ->
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            commandLine 'git', 'describe', '--tags', '--dirty'
-            standardOutput = stdout
-        }
-        return stdout.toString().trim()
-    }
-    catch (ignored) {
-        return null;
-    }
-}
+pocketSigningFile.withInputStream { pocketSigning.load(it) }
 
 android {
+    namespace 'net.typeblog.shelter'
     compileSdk 35
-    buildToolsVersion = '35.0.0'
+    // 35.0.0 emits unescaped Windows paths in generated AIDL Java comments.
+    buildToolsVersion '36.0.0'
     defaultConfig {
-        applicationId "net.typeblog.shelter"
-        minSdkVersion 24
-        targetSdkVersion 35
-        versionCode getVersionCode()
-        versionName getVersionName()
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        applicationId 'io.github.nekontritce11123.pocketandroid'
+        minSdk 29
+        targetSdk 35
+        versionCode providers.gradleProperty('pocketVersionCode').getOrElse('6').toInteger()
+        versionName '0.3.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    signingConfigs {
+        pocket {
+            storeFile rootProject.file('.local/signing/pocket.p12')
+            storeType 'PKCS12'
+            storePassword pocketSigning.getProperty('storePassword')
+            keyAlias pocketSigning.getProperty('keyAlias')
+            keyPassword pocketSigning.getProperty('keyPassword')
+        }
     }
     buildTypes {
+        debug { signingConfig signingConfigs.pocket }
         release {
+            signingConfig signingConfigs.pocket
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-    applicationVariants.all { variant ->
-        if (variant.name == "debug") {
-            variant.outputs.each { o -> o.versionCodeOverride = System.currentTimeSeconds() }
         }
     }
     compileOptions {
@@ -69,11 +47,13 @@ android {
     }
     buildFeatures {
         aidl true
+        buildConfig true
     }
-    namespace 'net.typeblog.shelter'
 }
 
 dependencies {
+    implementation files('libs/libbox.aar')
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'androidx.legacy:legacy-support-core-ui:1.0.0'
     implementation 'androidx.fragment:fragment:1.8.4'
@@ -85,6 +65,7 @@ dependencies {
     debugImplementation project(path: ':setup-wizard-lib', configuration: 'gingerbreadCompatDebugRuntimeElements')
     releaseImplementation project(path: ':setup-wizard-lib', configuration: 'gingerbreadCompatReleaseRuntimeElements')
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test:runner:1.6.0-alpha04'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.0-alpha01'
+    testImplementation 'org.json:json:20240303'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
 }

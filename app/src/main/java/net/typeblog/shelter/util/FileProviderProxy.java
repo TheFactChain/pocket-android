@@ -1,5 +1,7 @@
 package net.typeblog.shelter.util;
 
+import net.typeblog.shelter.BuildConfig;
+
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 
@@ -14,7 +16,7 @@ import java.io.FileNotFoundException;
 // It forwards all requests to one Uri assigned through
 // static methods.
 public class FileProviderProxy extends FileProvider {
-    private static final String AUTHORITY_NAME = "net.typeblog.shelter.files";
+    private static final String AUTHORITY_NAME = BuildConfig.APPLICATION_ID + ".files";
     private static final String FORWARD_PATH_PREFIX = "/forward/"; // All content Uris pointing to this path indicates forwarded Fd.
     private static UriForwardProxy sProxy = null;
 

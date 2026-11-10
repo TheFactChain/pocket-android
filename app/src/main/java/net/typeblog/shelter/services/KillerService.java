@@ -34,14 +34,6 @@ public class KillerService extends Service {
     }
 
     @Override
-    public void onTrimMemory(int level) {
-        super.onTrimMemory(level);
-        if (level >= TRIM_MEMORY_BACKGROUND) {
-            killEverything();
-        }
-    }
-
-    @Override
     public void onDestroy() {
         super.onDestroy();
         killEverything();

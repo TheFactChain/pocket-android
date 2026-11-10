@@ -1,11 +1,8 @@
 package net.typeblog.shelter.util;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 
-import net.typeblog.shelter.services.PaymentStubService;
 import net.typeblog.shelter.ui.DummyActivity;
 
 public class SettingsManager {
@@ -42,33 +39,6 @@ public class SettingsManager {
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         Utility.transferIntentToProfile(mContext, intent);
         mContext.startActivity(intent);
-    }
-
-    // Enforce all settings
-    public void applyAll() {
-        applyCrossProfileFileChooser();
-        applyPaymentStub();
-    }
-
-    // Read and apply the enabled state of the cross profile file chooser
-    public void applyCrossProfileFileChooser() {
-        boolean enabled = mStorage.getBoolean(LocalStorageManager.PREF_CROSS_PROFILE_FILE_CHOOSER);
-        mContext.getPackageManager().setComponentEnabledSetting(
-                new ComponentName(mContext, CrossProfileDocumentsProvider.class),
-                enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP);
-    }
-
-    // Set the enabled state of the cross profile file chooser
-    public void setCrossProfileFileChooserEnabled(boolean enabled) {
-        mStorage.setBoolean(LocalStorageManager.PREF_CROSS_PROFILE_FILE_CHOOSER, enabled);
-        applyCrossProfileFileChooser();
-        syncSettingsToProfileBool(LocalStorageManager.PREF_CROSS_PROFILE_FILE_CHOOSER, enabled);
-    }
-
-    // Get the enabled state of the cross profile file chooser
-    public boolean getCrossProfileFileChooserEnabled() {
-        return mStorage.getBoolean(LocalStorageManager.PREF_CROSS_PROFILE_FILE_CHOOSER);
     }
 
     // Set the blocked state of cross-profile contacts searching
@@ -120,21 +90,4 @@ public class SettingsManager {
         return mStorage.getBoolean(LocalStorageManager.PREF_DONT_FREEZE_FOREGROUND);
     }
 
-    public boolean getPaymentStubEnabled() {
-        return mStorage.getBoolean(LocalStorageManager.PREF_PAYMENT_STUB);
-    }
-
-    public void setPaymentStubEnabled(boolean enabled) {
-        mStorage.setBoolean(LocalStorageManager.PREF_PAYMENT_STUB, enabled);
-        applyPaymentStub();
-    }
-
-    // Enable / disable the payment stub component based on settings in local storage
-    public void applyPaymentStub() {
-        boolean enabled = mStorage.getBoolean(LocalStorageManager.PREF_PAYMENT_STUB);
-        mContext.getPackageManager().setComponentEnabledSetting(
-                new ComponentName(mContext, PaymentStubService.class),
-                enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                PackageManager.DONT_KILL_APP);
-    }
 }

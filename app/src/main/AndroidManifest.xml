@@ -2,25 +2,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="internalOnly" >
+    <permission android:name="${applicationId}.permission.INTERNAL" android:protectionLevel="signature" />
+    <uses-permission android:name="${applicationId}.permission.INTERNAL" />
 
     <uses-feature android:name="android.software.device_admin" android:required="true"/>
     <uses-feature android:name="android.software.managed_users" android:required="true"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
-    <uses-permission android:maxSdkVersion="25"
-        android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.NFC" />
 
     <!-- For querying apps on Android R and later -->
     <queries>
@@ -41,6 +38,7 @@
         <!-- The main activity for UI -->
         <activity android:name=".ui.MainActivity"
             android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -55,10 +53,23 @@
             android:exported="false"/>
 
         <!-- The Settings activity -->
+        <activity android:name=".ui.OpenPocketActivity" android:exported="false" />
+        <activity android:name=".ui.ConnectionScannerActivity" android:exported="false" />
+        <activity android:name=".ui.ConnectionScannerActivity$SecureCaptureActivity"
+            android:exported="false" android:screenOrientation="fullSensor"
+            android:stateNotNeeded="true" android:theme="@style/zxing_CaptureTheme" />
         <activity android:name=".ui.SettingsActivity"
             android:label="@string/settings" />
 
         <!-- An activity that wraps intents that cross the profile boundary -->
+        <activity android:name=".ui.PairProfileActivity" android:exported="true"
+            android:permission="${applicationId}.permission.INTERNAL"
+            android:excludeFromRecents="true" android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="${applicationId}.action.AUTHENTICATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <!-- Needed because only cross-profile Activity intents are supported -->
         <activity android:name=".ui.DummyActivity"
             android:excludeFromRecents="true"
@@ -66,21 +77,15 @@
             android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
             android:exported="true">
             <intent-filter>
-                <action android:name="net.typeblog.shelter.action.FINALIZE_PROVISION" />
-                <action android:name="net.typeblog.shelter.action.START_SERVICE" />
-                <action android:name="net.typeblog.shelter.action.TRY_START_SERVICE" />
-                <action android:name="net.typeblog.shelter.action.INSTALL_PACKAGE" />
-                <action android:name="net.typeblog.shelter.action.UNINSTALL_PACKAGE" />
-                <action android:name="net.typeblog.shelter.action.UNFREEZE_AND_LAUNCH" />
-                <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_AND_LAUNCH" />
-                <action android:name="net.typeblog.shelter.action.PUBLIC_FREEZE_ALL" />
-                <action android:name="net.typeblog.shelter.action.FREEZE_ALL_IN_LIST" />
-                <!-- We need two of these to avoid being prompted with an action chooser dialog -->
-                <!-- When the intent is actually already forwarded to work profile -->
-                <action android:name="net.typeblog.shelter.action.START_FILE_SHUTTLE" />
-                <action android:name="net.typeblog.shelter.action.START_FILE_SHUTTLE_2" />
-                <action android:name="net.typeblog.shelter.action.SYNCHRONIZE_PREFERENCE" />
-                <action android:name="net.typeblog.shelter.action.PACKAGEINSTALLER_CALLBACK" />
+                <action android:name="${applicationId}.action.FINALIZE_PROVISION" />
+                <action android:name="${applicationId}.action.START_SERVICE" />
+                <action android:name="${applicationId}.action.TRY_START_SERVICE" />
+                <action android:name="${applicationId}.action.INSTALL_PACKAGE" />
+                <action android:name="${applicationId}.action.UNINSTALL_PACKAGE" />
+                <action android:name="${applicationId}.action.UNFREEZE_AND_LAUNCH" />
+                <action android:name="${applicationId}.action.PUBLIC_UNFREEZE_AND_LAUNCH" />
+                <action android:name="${applicationId}.action.SYNCHRONIZE_PREFERENCE" />
+                <action android:name="${applicationId}.action.PACKAGEINSTALLER_CALLBACK" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -117,7 +122,7 @@
         <!-- A FileProvider that proxies opened Fd from the other profile -->
         <provider
             android:name="net.typeblog.shelter.util.FileProviderProxy"
-            android:authorities="net.typeblog.shelter.files"
+            android:authorities="${applicationId}.files"
             android:grantUriPermissions="true"
             android:exported="false">
             <meta-data
@@ -125,50 +130,32 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- A DocumentsProvider that lists files in another profile -->
-        <provider
-            android:name="net.typeblog.shelter.util.CrossProfileDocumentsProvider"
-            android:authorities="net.typeblog.shelter.documents"
-            android:grantUriPermissions="true"
-            android:permission="android.permission.MANAGE_DOCUMENTS"
-            android:exported="true"
-            android:enabled="false">
-            <intent-filter>
-                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
-            </intent-filter>
-        </provider>
-
         <!-- Core service running on both the main profile and the work profile -->
         <!-- Actions like cloning / freezing apps will be performed by this service -->
+        <!-- A profile owner qualifies for systemExempted without exact-alarm permissions. -->
         <service android:name=".services.ShelterService"
                 android:exported="true"
                 android:foregroundServiceType="systemExempted"
-                android:permission="android.permission.BIND_DEVICE_ADMIN"/>
-
-        <!-- Service to forward file information between profiles -->
-        <service android:name=".services.FileShuttleService"
-                android:exported="true"
-                android:permission="android.permission.BIND_DEVICE_ADMIN" />
+                android:permission="android.permission.BIND_DEVICE_ADMIN"
+                tools:ignore="ForegroundServicePermission"/>
 
         <!-- A hack service to ensure every ShelterService is killed when App is removed -->
+        <service android:name=".vpn.PocketVpnService" android:process=":vpn"
+            android:exported="true" android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="systemExempted"
+            tools:ignore="ForegroundServicePermission">
+            <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
+            <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="true" />
+        </service>
+        <receiver android:name=".receivers.PocketBootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- from recent tasks -->
         <service android:name=".services.KillerService" />
-
-        <!-- Service to freeze apps on screen lock -->
-        <service android:name=".services.FreezeService"
-            android:foregroundServiceType="systemExempted" />
-
-        <!-- Payment stub service -->
-        <service android:name=".services.PaymentStubService"
-            android:exported="true"
-            android:enabled="false"
-            android:permission="android.permission.BIND_NFC_SERVICE">
-            <intent-filter>
-                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE"/>
-            </intent-filter>
-            <meta-data android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/payment_stub"/>
-        </service>
 
     </application>
 

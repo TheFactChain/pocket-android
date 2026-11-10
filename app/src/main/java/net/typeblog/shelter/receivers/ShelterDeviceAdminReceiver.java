@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.ui.DummyActivity;
 import net.typeblog.shelter.util.Utility;
@@ -31,7 +32,7 @@ public class ShelterDeviceAdminReceiver extends DeviceAdminReceiver {
         // Delegate starting activity to notification to work around background limitations
         // And also maybe this will fix bugs on stupid custom OSes like MIUI / EMUI
         Notification notification = Utility.buildNotification(context, true,
-                "shelter-finish-provision",
+                BuildConfig.APPLICATION_ID + ".finish-provision",
                 context.getString(R.string.finish_provision_title),
                 context.getString(R.string.finish_provision_desc),
                 R.drawable.ic_notification_white_24dp);

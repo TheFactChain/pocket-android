@@ -1,0 +1,990 @@
+{
+  "aarSHA256": "27f8ef8bc2e9d673ce58ffa32e39aa428739ca7e9493cd70ea2dd6b0fcb332c3",
+  "singBoxCommit": "c005f35300ce76427dc285481ec5695f5b179cd2",
+  "singBoxSource": "https://github.com/SagerNet/sing-box/archive/c005f35300ce76427dc285481ec5695f5b179cd2.tar.gz",
+  "sourcePatches": [
+    {
+      "path": "tools/patches/libbox-no-config-snapshots.patch",
+      "sha256": "90b038a7658d795cf824795578391014153190e4d74e9e3fbb6d3f0d9c07041a"
+    }
+  ],
+  "singBoxLicenseFiles": [
+    "sing-box/LICENSE",
+    "sing-box/common/ja3/LICENSE",
+    "sing-box/common/windivert/assets/LICENSE.txt"
+  ],
+  "goRuntimeSource": "https://go.dev/dl/go1.25.14.src.tar.gz",
+  "modules": [
+    {
+      "module": "filippo.io/age",
+      "version": "v1.3.1",
+      "goSum": "h1:hbzdQOJkuaMEpRCLSN1/C5DX74RPcNCk6oqhKMXmZi0=",
+      "sourceZip": "https://proxy.golang.org/filippo.io/age/@v/v1.3.1.zip",
+      "sourceMod": "https://proxy.golang.org/filippo.io/age/@v/v1.3.1.mod",
+      "licenseFiles": [
+        "go-modules/81e7db6097c1/LICENSE",
+        "go-modules/81e7db6097c1/.github/workflows/LICENSE.suffix.txt"
+      ]
+    },
+    {
+      "module": "filippo.io/edwards25519",
+      "version": "v1.2.0",
+      "goSum": "h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=",
+      "sourceZip": "https://proxy.golang.org/filippo.io/edwards25519/@v/v1.2.0.zip",
+      "sourceMod": "https://proxy.golang.org/filippo.io/edwards25519/@v/v1.2.0.mod",
+      "licenseFiles": [
+        "go-modules/6c729efccdcd/LICENSE"
+      ]
+    },
+    {
+      "module": "filippo.io/hpke",
+      "version": "v0.4.0",
+      "goSum": "h1:p575VVQ6ted4pL+it6M00V/f2qTZITO0zgmdKCkd5+A=",
+      "sourceZip": "https://proxy.golang.org/filippo.io/hpke/@v/v0.4.0.zip",
+      "sourceMod": "https://proxy.golang.org/filippo.io/hpke/@v/v0.4.0.mod",
+      "licenseFiles": [
+        "go-modules/7d4108039068/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/ajg/form",
+      "version": "v1.5.1",
+      "goSum": "h1:t9c7v8JUKu/XxOGBU0yjNpaMloxGEJhUkqFRq0ibGeU=",
+      "sourceZip": "https://proxy.golang.org/github.com/ajg/form/@v/v1.5.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/ajg/form/@v/v1.5.1.mod",
+      "licenseFiles": [
+        "go-modules/fd47436441b1/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/andybalholm/brotli",
+      "version": "v1.1.0",
+      "goSum": "h1:eLKJA0d02Lf0mVpIDgYnqXcUn0GqVmEFny3VuID1U3M=",
+      "sourceZip": "https://proxy.golang.org/github.com/andybalholm/brotli/@v/v1.1.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/andybalholm/brotli/@v/v1.1.0.mod",
+      "licenseFiles": [
+        "go-modules/612cff47f17a/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/anmitsu/go-shlex",
+      "version": "v0.0.0-20200514113438-38f4b401e2be",
+      "goSum": "h1:9AeTilPcZAjCFIImctFaOjnTIavg87rW78vTPkQqLI8=",
+      "sourceZip": "https://proxy.golang.org/github.com/anmitsu/go-shlex/@v/v0.0.0-20200514113438-38f4b401e2be.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/anmitsu/go-shlex/@v/v0.0.0-20200514113438-38f4b401e2be.mod",
+      "licenseFiles": [
+        "go-modules/1bc55d0a5654/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/anytls/sing-anytls",
+      "version": "v0.0.11",
+      "goSum": "h1:w8e9Uj1oP3m4zxkyZDewPk0EcQbvVxb7Nn+rapEx4fc=",
+      "sourceZip": "https://proxy.golang.org/github.com/anytls/sing-anytls/@v/v0.0.11.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/anytls/sing-anytls/@v/v0.0.11.mod",
+      "licenseFiles": [
+        "go-modules/ebbba57c51ba/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/caddyserver/certmagic",
+      "version": "v0.25.3-0.20260421143802-60d9d8b415d6",
+      "goSum": "h1:LYSB6VgWzKtNrcxElw3c97BP40Oc7bizKxA9K1Vi/5k=",
+      "sourceZip": "https://proxy.golang.org/github.com/caddyserver/certmagic/@v/v0.25.3-0.20260421143802-60d9d8b415d6.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/caddyserver/certmagic/@v/v0.25.3-0.20260421143802-60d9d8b415d6.mod",
+      "licenseFiles": [
+        "go-modules/b91faa4953bc/LICENSE.txt"
+      ]
+    },
+    {
+      "module": "github.com/caddyserver/zerossl",
+      "version": "v0.1.5",
+      "goSum": "h1:dkvOjBAEEtY6LIGAHei7sw2UgqSD6TrWweXpV7lvEvE=",
+      "sourceZip": "https://proxy.golang.org/github.com/caddyserver/zerossl/@v/v0.1.5.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/caddyserver/zerossl/@v/v0.1.5.mod",
+      "licenseFiles": [
+        "go-modules/060d810cc929/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/coder/websocket",
+      "version": "v1.8.14",
+      "goSum": "h1:9L0p0iKiNOibykf283eHkKUHHrpG7f65OE3BhhO7v9g=",
+      "sourceZip": "https://proxy.golang.org/github.com/coder/websocket/@v/v1.8.14.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/coder/websocket/@v/v1.8.14.mod",
+      "licenseFiles": [
+        "go-modules/2a9d8101be3b/LICENSE.txt"
+      ]
+    },
+    {
+      "module": "github.com/creack/pty",
+      "version": "v1.1.24",
+      "goSum": "h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=",
+      "sourceZip": "https://proxy.golang.org/github.com/creack/pty/@v/v1.1.24.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/creack/pty/@v/v1.1.24.mod",
+      "licenseFiles": [
+        "go-modules/61d8a0379024/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/cretz/bine",
+      "version": "v0.2.0",
+      "goSum": "h1:8GiDRGlTgz+o8H9DSnsl+5MeBK4HsExxgl6WgzOCuZo=",
+      "sourceZip": "https://proxy.golang.org/github.com/cretz/bine/@v/v0.2.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/cretz/bine/@v/v0.2.0.mod",
+      "licenseFiles": [
+        "go-modules/499d09a9f32f/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/database64128/netx-go",
+      "version": "v0.1.1",
+      "goSum": "h1:dT5LG7Gs7zFZBthFBbzWE6K8wAHjSNAaK7wCYZT7NzM=",
+      "sourceZip": "https://proxy.golang.org/github.com/database64128/netx-go/@v/v0.1.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/database64128/netx-go/@v/v0.1.1.mod",
+      "licenseFiles": [
+        "go-modules/d24702a75d67/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/database64128/tfo-go/v2",
+      "version": "v2.3.2",
+      "goSum": "h1:UhZMKiMq3swZGUiETkLBDzQnZBPSAeBMClpJGlnJ5Fw=",
+      "sourceZip": "https://proxy.golang.org/github.com/database64128/tfo-go/v2/@v/v2.3.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/database64128/tfo-go/v2/@v/v2.3.2.mod",
+      "licenseFiles": [
+        "go-modules/414ac84ac38c/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/florianl/go-nfqueue/v2",
+      "version": "v2.1.0",
+      "goSum": "h1:Fywt30TY/evxyDySpXjxQ1jsRW7nQbLpOhELqpr4068=",
+      "sourceZip": "https://proxy.golang.org/github.com/florianl/go-nfqueue/v2/@v/v2.1.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/florianl/go-nfqueue/v2/@v/v2.1.0.mod",
+      "licenseFiles": [
+        "go-modules/85b20acff346/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/fsnotify/fsnotify",
+      "version": "v1.9.0",
+      "goSum": "h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=",
+      "sourceZip": "https://proxy.golang.org/github.com/fsnotify/fsnotify/@v/v1.9.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/fsnotify/fsnotify/@v/v1.9.0.mod",
+      "licenseFiles": [
+        "go-modules/378f777c98af/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/fxamacker/cbor/v2",
+      "version": "v2.9.0",
+      "goSum": "h1:NpKPmjDBgUfBms6tr6JZkTHtfFGcMKsw3eGcmD/sapM=",
+      "sourceZip": "https://proxy.golang.org/github.com/fxamacker/cbor/v2/@v/v2.9.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/fxamacker/cbor/v2/@v/v2.9.0.mod",
+      "licenseFiles": [
+        "go-modules/3c0a76b068a1/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/gaissmai/bart",
+      "version": "v0.26.1",
+      "goSum": "h1:+w4rnLGNlA2GDVn382Tfe3jOsK5vOr5n4KmigJ9lbTo=",
+      "sourceZip": "https://proxy.golang.org/github.com/gaissmai/bart/@v/v0.26.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/gaissmai/bart/@v/v0.26.1.mod",
+      "licenseFiles": [
+        "go-modules/a3a70fbe3cda/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/go-chi/chi/v5",
+      "version": "v5.2.5",
+      "goSum": "h1:Eg4myHZBjyvJmAFjFvWgrqDTXFyOzjj7YIm3L3mu6Ug=",
+      "sourceZip": "https://proxy.golang.org/github.com/go-chi/chi/v5/@v/v5.2.5.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/go-chi/chi/v5/@v/v5.2.5.mod",
+      "licenseFiles": [
+        "go-modules/1a28e51cdbf9/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/go-chi/render",
+      "version": "v1.0.3",
+      "goSum": "h1:AsXqd2a1/INaIfUSKq3G5uA8weYx20FOsM7uSoCyyt4=",
+      "sourceZip": "https://proxy.golang.org/github.com/go-chi/render/@v/v1.0.3.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/go-chi/render/@v/v1.0.3.mod",
+      "licenseFiles": [
+        "go-modules/9f7b84a126dd/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/gobwas/httphead",
+      "version": "v0.1.0",
+      "goSum": "h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=",
+      "sourceZip": "https://proxy.golang.org/github.com/gobwas/httphead/@v/v0.1.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/gobwas/httphead/@v/v0.1.0.mod",
+      "licenseFiles": [
+        "go-modules/9af26d235ce1/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/gobwas/pool",
+      "version": "v0.2.1",
+      "goSum": "h1:xfeeEhW7pwmX8nuLVlqbzVc7udMDrwetjEv+TZIz1og=",
+      "sourceZip": "https://proxy.golang.org/github.com/gobwas/pool/@v/v0.2.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/gobwas/pool/@v/v0.2.1.mod",
+      "licenseFiles": [
+        "go-modules/b39fe353f3d7/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/godbus/dbus/v5",
+      "version": "v5.2.2",
+      "goSum": "h1:TUR3TgtSVDmjiXOgAAyaZbYmIeP3DPkld3jgKGV8mXQ=",
+      "sourceZip": "https://proxy.golang.org/github.com/godbus/dbus/v5/@v/v5.2.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/godbus/dbus/v5/@v/v5.2.2.mod",
+      "licenseFiles": [
+        "go-modules/65a846c6c827/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/gofrs/uuid/v5",
+      "version": "v5.5.1",
+      "goSum": "h1:z1Ce19/JwNidXpy3tOQc3241lnJLKdKyq/xlNvlD4Ng=",
+      "sourceZip": "https://proxy.golang.org/github.com/gofrs/uuid/v5/@v/v5.5.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/gofrs/uuid/v5/@v/v5.5.1.mod",
+      "licenseFiles": [
+        "go-modules/856d7ac12910/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/golang/groupcache",
+      "version": "v0.0.0-20241129210726-2c02b8208cf8",
+      "goSum": "h1:f+oWsMOmNPc8JmEHVZIycC7hBoQxHH9pNKQORJNozsQ=",
+      "sourceZip": "https://proxy.golang.org/github.com/golang/groupcache/@v/v0.0.0-20241129210726-2c02b8208cf8.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/golang/groupcache/@v/v0.0.0-20241129210726-2c02b8208cf8.mod",
+      "licenseFiles": [
+        "go-modules/5ec6dd3c2269/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/google/btree",
+      "version": "v1.1.3",
+      "goSum": "h1:CVpQJjYgC4VbzxeGVHfvZrv1ctoYCAI8vbl07Fcxlyg=",
+      "sourceZip": "https://proxy.golang.org/github.com/google/btree/@v/v1.1.3.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/google/btree/@v/v1.1.3.mod",
+      "licenseFiles": [
+        "go-modules/e4abff79393a/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/google/gopacket",
+      "version": "v1.1.19",
+      "goSum": "h1:ves8RnFZPGiFnTS0uPQStjwru6uO6h+nlr9j6fL7kF8=",
+      "sourceZip": "https://proxy.golang.org/github.com/google/gopacket/@v/v1.1.19.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/google/gopacket/@v/v1.1.19.mod",
+      "licenseFiles": [
+        "go-modules/edbe9e0ca15e/AUTHORS",
+        "go-modules/edbe9e0ca15e/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/hashicorp/yamux",
+      "version": "v0.1.2",
+      "goSum": "h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=",
+      "sourceZip": "https://proxy.golang.org/github.com/hashicorp/yamux/@v/v0.1.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/hashicorp/yamux/@v/v0.1.2.mod",
+      "licenseFiles": [
+        "go-modules/f08281d9ffe3/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/hdevalence/ed25519consensus",
+      "version": "v0.2.0",
+      "goSum": "h1:37ICyZqdyj0lAZ8P4D1d1id3HqbbG1N3iBb1Tb4rdcU=",
+      "sourceZip": "https://proxy.golang.org/github.com/hdevalence/ed25519consensus/@v/v0.2.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/hdevalence/ed25519consensus/@v/v0.2.0.mod",
+      "licenseFiles": [
+        "go-modules/37c5edaafc17/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/huin/goupnp",
+      "version": "v1.3.0",
+      "goSum": "h1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=",
+      "sourceZip": "https://proxy.golang.org/github.com/huin/goupnp/@v/v1.3.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/huin/goupnp/@v/v1.3.0.mod",
+      "licenseFiles": [
+        "go-modules/bdb2f6794d2a/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/jackpal/go-nat-pmp",
+      "version": "v1.0.2",
+      "goSum": "h1:KzKSgb7qkJvOUTqYl9/Hg/me3pWgBmERKrTGD7BdWus=",
+      "sourceZip": "https://proxy.golang.org/github.com/jackpal/go-nat-pmp/@v/v1.0.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/jackpal/go-nat-pmp/@v/v1.0.2.mod",
+      "licenseFiles": [
+        "go-modules/95a38a8961e4/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/jsimonetti/rtnetlink",
+      "version": "v1.4.1",
+      "goSum": "h1:JfD4jthWBqZMEffc5RjgmlzpYttAVw1sdnmiNaPO3hE=",
+      "sourceZip": "https://proxy.golang.org/github.com/jsimonetti/rtnetlink/@v/v1.4.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/jsimonetti/rtnetlink/@v/v1.4.1.mod",
+      "licenseFiles": [
+        "go-modules/0f42c2d6f431/LICENSE.md"
+      ]
+    },
+    {
+      "module": "github.com/klauspost/compress",
+      "version": "v1.19.1",
+      "goSum": "h1:VsB4HPswih7mmZ8WleSFQ75c/Ui1M4trX5oAsJnhSlk=",
+      "sourceZip": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/klauspost/compress/@v/v1.19.1.mod",
+      "licenseFiles": [
+        "go-modules/5e4c6b2d989c/LICENSE",
+        "go-modules/5e4c6b2d989c/gzhttp/LICENSE",
+        "go-modules/5e4c6b2d989c/internal/lz4ref/LICENSE",
+        "go-modules/5e4c6b2d989c/internal/snapref/LICENSE",
+        "go-modules/5e4c6b2d989c/s2/LICENSE",
+        "go-modules/5e4c6b2d989c/s2/cmd/internal/filepathx/LICENSE",
+        "go-modules/5e4c6b2d989c/s2/cmd/internal/readahead/LICENSE",
+        "go-modules/5e4c6b2d989c/snappy/AUTHORS",
+        "go-modules/5e4c6b2d989c/snappy/LICENSE",
+        "go-modules/5e4c6b2d989c/snappy/xerial/LICENSE",
+        "go-modules/5e4c6b2d989c/zstd/internal/xxhash/LICENSE.txt"
+      ]
+    },
+    {
+      "module": "github.com/klauspost/cpuid/v2",
+      "version": "v2.3.0",
+      "goSum": "h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=",
+      "sourceZip": "https://proxy.golang.org/github.com/klauspost/cpuid/v2/@v/v2.3.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/klauspost/cpuid/v2/@v/v2.3.0.mod",
+      "licenseFiles": [
+        "go-modules/c0d493deb2b2/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/koron/go-ssdp",
+      "version": "v0.0.4",
+      "goSum": "h1:1IDwrghSKYM7yLf7XCzbByg2sJ/JcNOZRXS2jczTwz0=",
+      "sourceZip": "https://proxy.golang.org/github.com/koron/go-ssdp/@v/v0.0.4.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/koron/go-ssdp/@v/v0.0.4.mod",
+      "licenseFiles": [
+        "go-modules/3fd5a8ea83e3/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/kr/fs",
+      "version": "v0.1.0",
+      "goSum": "h1:Jskdu9ieNAYnjxsi0LbQp1ulIKZV1LAFgK1tWhpZgl8=",
+      "sourceZip": "https://proxy.golang.org/github.com/kr/fs/@v/v0.1.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/kr/fs/@v/v0.1.0.mod",
+      "licenseFiles": [
+        "go-modules/18fd7ce4bb10/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/libdns/libdns",
+      "version": "v1.1.1",
+      "goSum": "h1:wPrHrXILoSHKWJKGd0EiAVmiJbFShguILTg9leS/P/U=",
+      "sourceZip": "https://proxy.golang.org/github.com/libdns/libdns/@v/v1.1.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/libdns/libdns/@v/v1.1.1.mod",
+      "licenseFiles": [
+        "go-modules/0aa1f70ad71d/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-nat",
+      "version": "v1.0.1-0.20250821073202-01afc089f138",
+      "goSum": "h1:YohuNPT/1k3VcThCQlBZ43PCPWPfMRS1zcxWBF2SLK8=",
+      "sourceZip": "https://proxy.golang.org/github.com/libp2p/go-nat/@v/v1.0.1-0.20250821073202-01afc089f138.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/libp2p/go-nat/@v/v1.0.1-0.20250821073202-01afc089f138.mod",
+      "licenseFiles": [
+        "go-modules/f32ef6a2b1a7/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/libp2p/go-netroute",
+      "version": "v0.2.1",
+      "goSum": "h1:V8kVrpD8GK0Riv15/7VN6RbUQ3URNZVosw7H2v9tksU=",
+      "sourceZip": "https://proxy.golang.org/github.com/libp2p/go-netroute/@v/v0.2.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/libp2p/go-netroute/@v/v0.2.1.mod",
+      "licenseFiles": [
+        "go-modules/0d474b3a0777/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/logrusorgru/aurora",
+      "version": "v2.0.3+incompatible",
+      "goSum": "h1:tOpm7WcpBTn4fjmVfgpQq0EfczGlG91VSDkswnjF5A8=",
+      "sourceZip": "https://proxy.golang.org/github.com/logrusorgru/aurora/@v/v2.0.3+incompatible.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/logrusorgru/aurora/@v/v2.0.3+incompatible.mod",
+      "licenseFiles": [
+        "go-modules/3a50ce192b5b/AUTHORS.md",
+        "go-modules/3a50ce192b5b/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/mdlayher/netlink",
+      "version": "v1.11.2",
+      "goSum": "h1:HKh2jqe+omdSWcQ88nrT7INE61B0NXfiSPFdgL4YbNI=",
+      "sourceZip": "https://proxy.golang.org/github.com/mdlayher/netlink/@v/v1.11.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/mdlayher/netlink/@v/v1.11.2.mod",
+      "licenseFiles": [
+        "go-modules/df87380eaff7/LICENSE.md"
+      ]
+    },
+    {
+      "module": "github.com/mdlayher/socket",
+      "version": "v0.6.0",
+      "goSum": "h1:ScZPaAGyO1icQnbFrhPM8mnXyMu9qukC1K4ZoM2IQKU=",
+      "sourceZip": "https://proxy.golang.org/github.com/mdlayher/socket/@v/v0.6.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/mdlayher/socket/@v/v0.6.0.mod",
+      "licenseFiles": [
+        "go-modules/799ee64aa89e/LICENSE.md"
+      ]
+    },
+    {
+      "module": "github.com/metacubex/utls",
+      "version": "v1.8.7",
+      "goSum": "h1:Cp+yWkNTFkSihETgGWq34hlVFds5HpYWVOR1xovUVTs=",
+      "sourceZip": "https://proxy.golang.org/github.com/metacubex/utls/@v/v1.8.7.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/metacubex/utls/@v/v1.8.7.mod",
+      "licenseFiles": [
+        "go-modules/bd08b47093b4/LICENSE",
+        "go-modules/bd08b47093b4/dicttls/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/mholt/acmez/v3",
+      "version": "v3.1.6",
+      "goSum": "h1:eGVQNObP0pBN4sxqrXeg7MYqTOWyoiYpQqITVWlrevk=",
+      "sourceZip": "https://proxy.golang.org/github.com/mholt/acmez/v3/@v/v3.1.6.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/mholt/acmez/v3/@v/v3.1.6.mod",
+      "licenseFiles": [
+        "go-modules/fb2f660bd8d7/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/miekg/dns",
+      "version": "v1.1.72",
+      "goSum": "h1:vhmr+TF2A3tuoGNkLDFK9zi36F2LS+hKTRW0Uf8kbzI=",
+      "sourceZip": "https://proxy.golang.org/github.com/miekg/dns/@v/v1.1.72.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/miekg/dns/@v/v1.1.72.mod",
+      "licenseFiles": [
+        "go-modules/5587c5fb4745/AUTHORS",
+        "go-modules/5587c5fb4745/COPYRIGHT",
+        "go-modules/5587c5fb4745/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/pires/go-proxyproto",
+      "version": "v0.8.1",
+      "goSum": "h1:9KEixbdJfhrbtjpz/ZwCdWDD2Xem0NZ38qMYaASJgp0=",
+      "sourceZip": "https://proxy.golang.org/github.com/pires/go-proxyproto/@v/v0.8.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/pires/go-proxyproto/@v/v0.8.1.mod",
+      "licenseFiles": [
+        "go-modules/24cc0bf2c789/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/pkg/sftp",
+      "version": "v1.13.10",
+      "goSum": "h1:+5FbKNTe5Z9aspU88DPIKJ9z2KZoaGCu6Sr6kKR/5mU=",
+      "sourceZip": "https://proxy.golang.org/github.com/pkg/sftp/@v/v1.13.10.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/pkg/sftp/@v/v1.13.10.mod",
+      "licenseFiles": [
+        "go-modules/581dbb1cadd0/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/quic-go/qpack",
+      "version": "v0.6.0",
+      "goSum": "h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=",
+      "sourceZip": "https://proxy.golang.org/github.com/quic-go/qpack/@v/v0.6.0.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/quic-go/qpack/@v/v0.6.0.mod",
+      "licenseFiles": [
+        "go-modules/1c4377cde23f/LICENSE.md"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/bbolt",
+      "version": "v0.0.0-20260915102804-500ee1e84832",
+      "goSum": "h1:KDXMGbzqLmDdKcld0T3wuMuqf1iezZq+DemgtZ/vhtQ=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/bbolt/@v/v0.0.0-20260915102804-500ee1e84832.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/bbolt/@v/v0.0.0-20260915102804-500ee1e84832.mod",
+      "licenseFiles": [
+        "go-modules/ac79227902ae/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/cors",
+      "version": "v1.2.1",
+      "goSum": "h1:Cv5Z8y9YSD6Gm+qSpNrL3LO4lD3eQVvbFYJSG7JCMHQ=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/cors/@v/v1.2.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/cors/@v/v1.2.1.mod",
+      "licenseFiles": [
+        "go-modules/ad798285f03e/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/fswatch",
+      "version": "v0.1.2",
+      "goSum": "h1:/TT7k4mkce1qFPxamLO842WjqBgbTBiXP2mlUjp9PFk=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/fswatch/@v/v0.1.2.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/fswatch/@v/v0.1.2.mod",
+      "licenseFiles": [
+        "go-modules/15a9b9320d26/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/gliderssh",
+      "version": "v0.3.4-0.20261023092853-e0cad6d28647",
+      "goSum": "h1:k4Yg+5FnI1CIYc25zxHJJ1A5JDr/VULxw0Bs5U7fpsY=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/gliderssh/@v/v0.3.4-0.20261023092853-e0cad6d28647.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/gliderssh/@v/v0.3.4-0.20261023092853-e0cad6d28647.mod",
+      "licenseFiles": [
+        "go-modules/55ff0a75f337/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/gomobile",
+      "version": "v0.1.12",
+      "goSum": "h1:XwzjZaclFF96deLqwAgK8gU3w0M2A8qxgDmhV+A0wjg=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/gomobile/@v/v0.1.12.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/gomobile/@v/v0.1.12.mod",
+      "licenseFiles": [
+        "go-modules/e6bd735848a2/LICENSE",
+        "go-modules/e6bd735848a2/PATENTS"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/gvisor",
+      "version": "v0.0.0-20260727.0-sing-box-mod.1",
+      "goSum": "h1:IdQ7yTKkB2wv8txwshxUroPlO4npOYAV71xb7xQ7Lys=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/gvisor/@v/v0.0.0-20260727.0-sing-box-mod.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/gvisor/@v/v0.0.0-20260727.0-sing-box-mod.1.mod",
+      "licenseFiles": [
+        "go-modules/4262d0dce5e0/AUTHORS",
+        "go-modules/4262d0dce5e0/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/netlink",
+      "version": "v0.0.0-20260814022025-64455d367bbf",
+      "goSum": "h1:b/3rm+KvxzuYRcnMdLq/hmcqX6/2B8k24l6SDHL2Piw=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/netlink/@v/v0.0.0-20260814022025-64455d367bbf.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/netlink/@v/v0.0.0-20260814022025-64455d367bbf.mod",
+      "licenseFiles": [
+        "go-modules/3b5be2474d0d/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/nftables",
+      "version": "v0.3.0-mod.4",
+      "goSum": "h1:vnOtcDYeSXv2e5RoRuGH0lrpttQFJ8iC4ICS2nhlDSo=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/nftables/@v/v0.3.0-mod.4.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/nftables/@v/v0.3.0-mod.4.mod",
+      "licenseFiles": [
+        "go-modules/90c038a19e98/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/quic-go",
+      "version": "v0.61.0-sing-box-mod.12",
+      "goSum": "h1:9/USaaiONHFeqBePb+4C/A0MBM2dmxED49UGBpHLHS4=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/quic-go/@v/v0.61.0-sing-box-mod.12.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/quic-go/@v/v0.61.0-sing-box-mod.12.mod",
+      "licenseFiles": [
+        "go-modules/b75c3cd977ee/LICENSE",
+        "go-modules/b75c3cd977ee/assets/LICENSE.md"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing",
+      "version": "v0.9.7-0.20261023115459-5dc452e537bf",
+      "goSum": "h1:qWlGERjsI0F1I9e1W5Z/ARk/9KEN7xIas6e2QHEypUM=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing/@v/v0.9.7-0.20261023115459-5dc452e537bf.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing/@v/v0.9.7-0.20261023115459-5dc452e537bf.mod",
+      "licenseFiles": [
+        "go-modules/662fb0208d81/LICENSE",
+        "go-modules/662fb0208d81/contrab/freelru/LICENSE",
+        "go-modules/662fb0208d81/contrab/freelru/NOTICE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-mux",
+      "version": "v0.3.10-0.20260929204512-caf09fe32475",
+      "goSum": "h1:aG0DqHEOjax7DyfE1GTAXZotOg3QGVCz3/8rCSua2kg=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-mux/@v/v0.3.10-0.20260929204512-caf09fe32475.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-mux/@v/v0.3.10-0.20260929204512-caf09fe32475.mod",
+      "licenseFiles": [
+        "go-modules/a721a6d85231/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-quic",
+      "version": "v0.7.2-0.20261020082049-7e0a5869a5f4",
+      "goSum": "h1:QuhAb8QW0pKYmSvfj/nK91libunBwVJiWb852yidlxI=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-quic/@v/v0.7.2-0.20261020082049-7e0a5869a5f4.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-quic/@v/v0.7.2-0.20261020082049-7e0a5869a5f4.mod",
+      "licenseFiles": [
+        "go-modules/1eb82d281458/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-shadowsocks",
+      "version": "v0.2.9-0.20260929204512-65740e0f0e3e",
+      "goSum": "h1:LKgE/uuqp/D2kgxYViOz8vf4slaCUfpFywXjtuwD5gU=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-shadowsocks/@v/v0.2.9-0.20260929204512-65740e0f0e3e.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-shadowsocks/@v/v0.2.9-0.20260929204512-65740e0f0e3e.mod",
+      "licenseFiles": [
+        "go-modules/614be2ee64d9/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-shadowsocks2",
+      "version": "v0.2.2-0.20260929152114-a69d1086332b",
+      "goSum": "h1:VH65QNqSHat2b+N3Rlzo5Qe44gRmQGwzY5atuy3D0A8=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-shadowsocks2/@v/v0.2.2-0.20260929152114-a69d1086332b.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-shadowsocks2/@v/v0.2.2-0.20260929152114-a69d1086332b.mod",
+      "licenseFiles": [
+        "go-modules/108718e0b325/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-shadowtls",
+      "version": "v0.2.2-0.20260928201441-a9c0127d5c99",
+      "goSum": "h1:l/tdZjaoDp3iqEG4NVrFHtphy1+Qjt9bpWAgNbF8iGg=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-shadowtls/@v/v0.2.2-0.20260928201441-a9c0127d5c99.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-shadowtls/@v/v0.2.2-0.20260928201441-a9c0127d5c99.mod",
+      "licenseFiles": [
+        "go-modules/3137cdbb1a99/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-snell",
+      "version": "v0.0.0-20260904135315-bc5a12ac736f",
+      "goSum": "h1:tbTCI+iis5sTmua7a6Q7vebcSRURok/LGgnEafnQAsc=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-snell/@v/v0.0.0-20260904135315-bc5a12ac736f.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-snell/@v/v0.0.0-20260904135315-bc5a12ac736f.mod",
+      "licenseFiles": [
+        "go-modules/4eadd0ccbade/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-tun",
+      "version": "v0.9.7-0.20261023115432-040db71fcd33",
+      "goSum": "h1:0+op+qbxh/M/JsqIG8tkEwPM+5pZtBeicf1ciMxp4OI=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-tun/@v/v0.9.7-0.20261023115432-040db71fcd33.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-tun/@v/v0.9.7-0.20261023115432-040db71fcd33.mod",
+      "licenseFiles": [
+        "go-modules/9718a43e1ac2/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/sing-vmess",
+      "version": "v0.2.9-0.20261019223527-a0c58542bd9d",
+      "goSum": "h1:K93710Sq6/TFl3GVs+NclQ3I+KPXFLluSsUFC0Sm0N8=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/sing-vmess/@v/v0.2.9-0.20261019223527-a0c58542bd9d.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/sing-vmess/@v/v0.2.9-0.20261019223527-a0c58542bd9d.mod",
+      "licenseFiles": [
+        "go-modules/65d794293953/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/smux",
+      "version": "v1.5.50-sing-box-mod.1",
+      "goSum": "h1:XkJcivBC9V4wBjiGXIXZ229aZCU1hzcbp6kSkkyQ478=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/smux/@v/v1.5.50-sing-box-mod.1.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/smux/@v/v1.5.50-sing-box-mod.1.mod",
+      "licenseFiles": [
+        "go-modules/fdba2462e95e/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/tailscale",
+      "version": "v1.102.1-sing-box-1.14-mod.5.0.20261019070639-79c1732442a9",
+      "goSum": "h1:Phb4IDqGdP2Wg8VDComdDy2uMg1ZN3gs0kpJHp6C8O8=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/tailscale/@v/v1.102.1-sing-box-1.14-mod.5.0.20261019070639-79c1732442a9.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/tailscale/@v/v1.102.1-sing-box-1.14-mod.5.0.20261019070639-79c1732442a9.mod",
+      "licenseFiles": [
+        "go-modules/032f98f3ba0d/LICENSE",
+        "go-modules/032f98f3ba0d/license_test.go",
+        "go-modules/032f98f3ba0d/PATENTS",
+        "go-modules/032f98f3ba0d/derp/xdp/headers/LICENSE.BSD-2-Clause",
+        "go-modules/032f98f3ba0d/internal/godown/github.com/go-json-experiment/json/AUTHORS",
+        "go-modules/032f98f3ba0d/internal/godown/github.com/go-json-experiment/json/LICENSE",
+        "go-modules/032f98f3ba0d/tempfork/spf13/cobra/LICENSE.txt"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/wireguard-go",
+      "version": "v0.0.8-0.20261022215841-e4d85ef2ed38",
+      "goSum": "h1:VruOdZAjG+nQi//y9YYL8Pf18+SymIkzBoxNt5gUzuY=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/wireguard-go/@v/v0.0.8-0.20261022215841-e4d85ef2ed38.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/wireguard-go/@v/v0.0.8-0.20261022215841-e4d85ef2ed38.mod",
+      "licenseFiles": [
+        "go-modules/4b6f3a3b5d6a/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/sagernet/ws",
+      "version": "v0.0.0-20231204124109-acfe8907c854",
+      "goSum": "h1:6uUiZcDRnZSAegryaUGwPC/Fj13JSHwiTftrXhMmYOc=",
+      "sourceZip": "https://proxy.golang.org/github.com/sagernet/ws/@v/v0.0.0-20231204124109-acfe8907c854.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/sagernet/ws/@v/v0.0.0-20231204124109-acfe8907c854.mod",
+      "licenseFiles": [
+        "go-modules/8836654fe13f/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/tailscale/peercred",
+      "version": "v0.0.0-20250107143737-35a0c7bd7edc",
+      "goSum": "h1:24heQPtnFR+yfntqhI3oAu9i27nEojcQ4NuBQOo5ZFA=",
+      "sourceZip": "https://proxy.golang.org/github.com/tailscale/peercred/@v/v0.0.0-20250107143737-35a0c7bd7edc.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/tailscale/peercred/@v/v0.0.0-20250107143737-35a0c7bd7edc.mod",
+      "licenseFiles": [
+        "go-modules/52dcfd0fbde7/AUTHORS",
+        "go-modules/52dcfd0fbde7/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/vishvananda/netns",
+      "version": "v0.0.5",
+      "goSum": "h1:DfiHV+j8bA32MFM7bfEunvT8IAqQ/NzSJHtcmW5zdEY=",
+      "sourceZip": "https://proxy.golang.org/github.com/vishvananda/netns/@v/v0.0.5.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/vishvananda/netns/@v/v0.0.5.mod",
+      "licenseFiles": [
+        "go-modules/c5c0433e96a0/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/x448/float16",
+      "version": "v0.8.4",
+      "goSum": "h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=",
+      "sourceZip": "https://proxy.golang.org/github.com/x448/float16/@v/v0.8.4.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/x448/float16/@v/v0.8.4.mod",
+      "licenseFiles": [
+        "go-modules/bf5b0184ba5e/LICENSE"
+      ]
+    },
+    {
+      "module": "github.com/zeebo/blake3",
+      "version": "v0.2.4",
+      "goSum": "h1:KYQPkhpRtcqh0ssGYcKLG1JYvddkEA8QwCM/yBqhaZI=",
+      "sourceZip": "https://proxy.golang.org/github.com/zeebo/blake3/@v/v0.2.4.zip",
+      "sourceMod": "https://proxy.golang.org/github.com/zeebo/blake3/@v/v0.2.4.mod",
+      "licenseFiles": [
+        "go-modules/8c82f7b469fd/LICENSE"
+      ]
+    },
+    {
+      "module": "go.uber.org/multierr",
+      "version": "v1.11.0",
+      "goSum": "h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=",
+      "sourceZip": "https://proxy.golang.org/go.uber.org/multierr/@v/v1.11.0.zip",
+      "sourceMod": "https://proxy.golang.org/go.uber.org/multierr/@v/v1.11.0.mod",
+      "licenseFiles": [
+        "go-modules/3cc09eaf82cd/LICENSE.txt"
+      ]
+    },
+    {
+      "module": "go.uber.org/zap",
+      "version": "v1.27.1",
+      "goSum": "h1:08RqriUEv8+ArZRYSTXy1LeBScaMpVSTBhCeaZYfMYc=",
+      "sourceZip": "https://proxy.golang.org/go.uber.org/zap/@v/v1.27.1.zip",
+      "sourceMod": "https://proxy.golang.org/go.uber.org/zap/@v/v1.27.1.mod",
+      "licenseFiles": [
+        "go-modules/e2114b1fb207/LICENSE"
+      ]
+    },
+    {
+      "module": "go.uber.org/zap/exp",
+      "version": "v0.3.0",
+      "goSum": "h1:6JYzdifzYkGmTdRR59oYH+Ng7k49H9qVpWwNSsGJj3U=",
+      "sourceZip": "https://proxy.golang.org/go.uber.org/zap/exp/@v/v0.3.0.zip",
+      "sourceMod": "https://proxy.golang.org/go.uber.org/zap/exp/@v/v0.3.0.mod",
+      "licenseFiles": [
+        "go-modules/87b494e615c3/LICENSE"
+      ]
+    },
+    {
+      "module": "go4.org/mem",
+      "version": "v0.0.0-20240501181205-ae6ca9944745",
+      "goSum": "h1:Tl++JLUCe4sxGu8cTpDzRLd3tN7US4hOxG5YpKCzkek=",
+      "sourceZip": "https://proxy.golang.org/go4.org/mem/@v/v0.0.0-20240501181205-ae6ca9944745.zip",
+      "sourceMod": "https://proxy.golang.org/go4.org/mem/@v/v0.0.0-20240501181205-ae6ca9944745.mod",
+      "licenseFiles": [
+        "go-modules/92e576d264da/LICENSE"
+      ]
+    },
+    {
+      "module": "go4.org/netipx",
+      "version": "v0.0.0-20231129151722-fdeea329fbba",
+      "goSum": "h1:0b9z3AuHCjxk0x/opv64kcgZLBseWJUpBw5I82+2U4M=",
+      "sourceZip": "https://proxy.golang.org/go4.org/netipx/@v/v0.0.0-20231129151722-fdeea329fbba.zip",
+      "sourceMod": "https://proxy.golang.org/go4.org/netipx/@v/v0.0.0-20231129151722-fdeea329fbba.mod",
+      "licenseFiles": [
+        "go-modules/f066bcb2a6a3/AUTHORS",
+        "go-modules/f066bcb2a6a3/LICENSE"
+      ]
+    },
+    {
+      "module": "golang.org/x/crypto",
+      "version": "v0.54.0",
+      "goSum": "h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/crypto/@v/v0.54.0.mod",
+      "licenseFiles": [
+        "go-modules/a02127aa55ad/LICENSE",
+        "go-modules/a02127aa55ad/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/exp",
+      "version": "v0.0.0-20260410095643-746e56fc9e2f",
+      "goSum": "h1:W3F4c+6OLc6H2lb//N1q4WpJkhzJCK5J6kUi1NTVXfM=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/exp/@v/v0.0.0-20260410095643-746e56fc9e2f.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/exp/@v/v0.0.0-20260410095643-746e56fc9e2f.mod",
+      "licenseFiles": [
+        "go-modules/3c28872f4c09/LICENSE",
+        "go-modules/3c28872f4c09/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/mod",
+      "version": "v0.37.0",
+      "goSum": "h1:vF1DjpVEshcIqoEaauuHebaLk1O1forxjxBaVn884JQ=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/mod/@v/v0.37.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/mod/@v/v0.37.0.mod",
+      "licenseFiles": [
+        "go-modules/84892de4fc2c/LICENSE",
+        "go-modules/84892de4fc2c/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.57.0",
+      "goSum": "h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/net/@v/v0.57.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/net/@v/v0.57.0.mod",
+      "licenseFiles": [
+        "go-modules/249afe93c89f/LICENSE",
+        "go-modules/249afe93c89f/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/oauth2",
+      "version": "v0.36.0",
+      "goSum": "h1:peZ/1z27fi9hUOFCAZaHyrpWG5lwe0RJEEEeH0ThlIs=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/oauth2/@v/v0.36.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/oauth2/@v/v0.36.0.mod",
+      "licenseFiles": [
+        "go-modules/cd1e02097012/LICENSE"
+      ]
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.22.0",
+      "goSum": "h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/sync/@v/v0.22.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/sync/@v/v0.22.0.mod",
+      "licenseFiles": [
+        "go-modules/af94cab6dfaa/LICENSE",
+        "go-modules/af94cab6dfaa/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/sys",
+      "version": "v0.47.0",
+      "goSum": "h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/sys/@v/v0.47.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/sys/@v/v0.47.0.mod",
+      "licenseFiles": [
+        "go-modules/dc957412cc90/LICENSE",
+        "go-modules/dc957412cc90/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/term",
+      "version": "v0.45.0",
+      "goSum": "h1:NwWyBmoJCbfTHpxrWoZ9C6/VxOf7ic219I8xZZFdrf0=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/term/@v/v0.45.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/term/@v/v0.45.0.mod",
+      "licenseFiles": [
+        "go-modules/6b13efd86cb2/LICENSE",
+        "go-modules/6b13efd86cb2/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.40.0",
+      "goSum": "h1:Ub2Z6/xjgF1WrYQz2nuITOEegKFtiIy+rieRJ5lHZKs=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/text/@v/v0.40.0.mod",
+      "licenseFiles": [
+        "go-modules/fc76a9419522/LICENSE",
+        "go-modules/fc76a9419522/PATENTS"
+      ]
+    },
+    {
+      "module": "golang.org/x/time",
+      "version": "v0.15.0",
+      "goSum": "h1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=",
+      "sourceZip": "https://proxy.golang.org/golang.org/x/time/@v/v0.15.0.zip",
+      "sourceMod": "https://proxy.golang.org/golang.org/x/time/@v/v0.15.0.mod",
+      "licenseFiles": [
+        "go-modules/45c2972ee85c/LICENSE",
+        "go-modules/45c2972ee85c/PATENTS"
+      ]
+    },
+    {
+      "module": "google.golang.org/genproto/googleapis/rpc",
+      "version": "v0.0.0-20251202230838-ff82c1b0f217",
+      "goSum": "h1:gRkg/vSppuSQoDjxyiGfN4Upv/h/DQmIR10ZU8dh4Ww=",
+      "sourceZip": "https://proxy.golang.org/google.golang.org/genproto/googleapis/rpc/@v/v0.0.0-20251202230838-ff82c1b0f217.zip",
+      "sourceMod": "https://proxy.golang.org/google.golang.org/genproto/googleapis/rpc/@v/v0.0.0-20251202230838-ff82c1b0f217.mod",
+      "licenseFiles": [
+        "go-modules/0a8b4fd97004/LICENSE"
+      ]
+    },
+    {
+      "module": "google.golang.org/grpc",
+      "version": "v1.79.1",
+      "goSum": "h1:zGhSi45ODB9/p3VAawt9a+O/MULLl9dpizzNNpq7flY=",
+      "sourceZip": "https://proxy.golang.org/google.golang.org/grpc/@v/v1.79.1.zip",
+      "sourceMod": "https://proxy.golang.org/google.golang.org/grpc/@v/v1.79.1.mod",
+      "licenseFiles": [
+        "go-modules/288d4f2b684d/AUTHORS",
+        "go-modules/288d4f2b684d/LICENSE",
+        "go-modules/288d4f2b684d/NOTICE.txt"
+      ]
+    },
+    {
+      "module": "google.golang.org/protobuf",
+      "version": "v1.36.11",
+      "goSum": "h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=",
+      "sourceZip": "https://proxy.golang.org/google.golang.org/protobuf/@v/v1.36.11.zip",
+      "sourceMod": "https://proxy.golang.org/google.golang.org/protobuf/@v/v1.36.11.mod",
+      "licenseFiles": [
+        "go-modules/7a39b7b8e4f9/LICENSE",
+        "go-modules/7a39b7b8e4f9/PATENTS"
+      ]
+    },
+    {
+      "module": "lukechampine.com/blake3",
+      "version": "v1.3.0",
+      "goSum": "h1:sJ3XhFINmHSrYCgl958hscfIa3bw8x4DqMP3u1YvoYE=",
+      "sourceZip": "https://proxy.golang.org/lukechampine.com/blake3/@v/v1.3.0.zip",
+      "sourceMod": "https://proxy.golang.org/lukechampine.com/blake3/@v/v1.3.0.mod",
+      "licenseFiles": [
+        "go-modules/a3beb8ccdb8f/LICENSE"
+      ]
+    }
+  ]
+}

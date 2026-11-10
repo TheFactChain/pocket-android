@@ -1,51 +1,77 @@
-Shelter
-===
+# Pocket Android
 
-Shelter is a Free and Open-Source (FOSS) app that leverages the "Work Profile" feature of Android to provide an isolated space that you can install or clone apps into.
+Pocket — открытая производная Shelter для отдельных копий приложений в рабочем
+профиле Android. Основа: Shelter `0afac87b2dc34e58652d6bb3cebb61b1baaf1b98`.
+Сохраняются Java/XML, создание профиля, установка base/split APK и рабочие ярлыки.
 
-Downloads
-===
+Pocket использует рабочий профиль, системные Always-on VPN и lockdown, отдельный
+процесс libbox, Hysteria 2 и VLESS + REALITY TCP. Конфигурация маршрутов формируется
+самим приложением без прямого fallback. Импорт принимает URI, QR, TXT и sing-box JSON;
+маршруты и исключения импортированного JSON не применяются. Пароли сохраняются
+локально в рабочем профиле через Android Keystore и AES-GCM.
 
-- [F-Droid](https://f-droid.org/app/net.typeblog.shelter) (Signed by F-Droid)
-- Custom F-Droid Repository (Signed by PeterCxy, contains latest development versions):
-  - [Click here](fdroidrepos://fdroid.typeblog.net/repo/?fingerprint=1A7E446C491C80BC2F83844A26387887990F97F2F379AE7B109679FEAE3DBC8C) to add from your phone
-  - Or scan the following QR-code:  
-  ![](fdroid_custom_repo.png)
-  - Or setup manually:
-    - Url: https://fdroid.typeblog.net/repo
-    - Fingerprint: `1A 7E 44 6C 49 1C 80 BC 2F 83 84 4A 26 38 78 87 99 0F 97 F2 F3 79 AE 7B 10 96 79 FE AE 3D BC 8C`
+Это разрабатываемая версия: наличие функции в коде не подтверждает её аппаратную
+приёмку. Фактические результаты и ограничения каждого этапа хранятся в Beads.
+По решению владельца реальные проверки VLESS отложены; текущий сервер — Hysteria 2.
+Реальные подключения в общую APK и исходники не включаются.
 
-You cannot switch between versions listed above that have different signature without uninstalling Shelter first.
+- Android 10+ (API 29), ARM64/ARMv7, applicationId `io.github.nekontritce11123.pocketandroid`.
+- Автозаморозка, общий файловый мост и NFC-заглушка Shelter исключены из продукта.
+- Исходная лицензия: [LICENSE](LICENSE). Происхождение и компоненты:
+  [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Задачи, проверки и блокеры ведутся только в локальном Beads (`bd`).
 
-Features
-===
+## Сборка в Windows
 
-- Installing apps inside a work profile for isolation
-- "Freeze" apps inside the work profile to prevent them from running or being woken up when you are not actively using them
-- Installing two copies of the same app on the same device
+Нужен Android SDK с platform 35, build-tools 36.0.0, platform-tools и NDK
+28.2.13676358. Готовый SDK можно использовать повторно; скрипт не меняет его
+и системные настройки Java/PATH. На текущем компьютере SDK находится в `D:\android-sdk`.
+Версии и SHA-256 загружаемых Java/Go закреплены в `tools/toolchain.lock.json`.
 
-Discussion & Support
-===
+```powershell
+.\tools\Setup.ps1 -AndroidSdk 'D:\android-sdk'
+.\tools\Build.ps1
+```
 
-- [Mailing List](https://lists.sr.ht/~petercxy/shelter)
-- Matrix Chat Room: #shelter:neo.angry.im
+Setup загружает Java 17 и Go из официальных источников, проверяет SHA-256,
+подготавливает gomobile/gobind и постоянную локальную подпись. Повторный Setup
+использует уже подготовленные инструменты и ключ. При отсутствии `app/libs/libbox.aar`
+Build вызывает `tools/Build-Libbox.ps1`: загружает официальный sing-box v1.14.4,
+проверяет commit и собирает обе ARM ABI локально. Ручное копирование библиотек не требуется.
+Для явной пересборки движка выполни `tools/Build-Libbox.ps1`.
 
-__The GitHub Issue list and pull requests are not checked regularly. Please use the mailing list instead.__
+Build выполняет unit-тесты, lint, сборку release/debug, instrumentation и отдельного
+тестового приложения Pocket Probe. Затем проверяет подпись, идентификатор, итоговый
+манифест и ELF/ZIP alignment нативных библиотек release APK.
+Для AIDL в Windows Build временно назначает свободный ASCII-диск R–Z этой же
+папке и освобождает его после сборки; исходники не перемещаются. Build-tools 36
+также исправляет неэкранированные пути в генерируемых Java-комментариях.
+Результат: `app/build/outputs/apk/release/app-release.apk`.
+Для проверки следующего обновления увеличь versionCode относительно установленной сборки:
 
-Caveats & Known Issues
-===
+```powershell
+.\tools\Build.ps1 -VersionCode 6
+```
 
-- Some caveats and known issues are discussed during the setup process of Shelter. __Please read through text in the setup wizard carefully__.
-- Shelter is only as safe as the Work Profile implementation of the Android OS you are using. For details, see <https://support.google.com/work/android/answer/6191949?hl=en>
+Подпись находится в `.local/signing/`: приватный ключ и пароль доступны текущему
+пользователю Windows и SYSTEM, каталог исключён из Git. Сохрани весь этот каталог
+в своей защищённой резервной копии: потеря подписи не позволит обновлять уже
+установленный Pocket. Не отправляй его вместе с исходниками или APK.
 
-State of the Project, Feature Requests, etc.
-===
+## Проверка на телефоне
 
-Since Shelter simply makes use of the Work Profile APIs exposed by Android, there is a limited set of features that are possible to implement via the app. As we do not intend on leveraging (or "abusing") adb privileges, the features of Shelter can only be a strict subset of the exposed, unprivileged APIs.
+Открой «Подключения» и выбери сервер. После подключения во вкладке «Основной»
+нажми нужное приложение и «Клонировать в Pocket»; при первом копировании Android
+может запросить разрешение установки из Pocket. Рабочая копия появится во вкладке
+Pocket: там доступны запуск, ярлык и удаление с предупреждением о рабочих данных.
+Справка и лицензии находятся в настройках. При обновлении сохраняй существующий профиль.
+Данные копий раздельные, но версия APK приложения общая между профилями.
 
-As a result, we do not intend on adding a lot of new features to Shelter going forward, unless there is to be big changes in the capabilities of work profile APIs. Shelter is currently in an effective **maintenance mode**. Nevertheless, the author is still committed to regularly **adapting Shelter to all new Android versions as soon as possible after they are released** -- this includes upgrading the target SDK level, adapting to any new features or restrictions introduced by the new Android version, updating all dependencies, and so on. The author still relies on Shelter for his daily life, so Shelter will **not** become abandonware in the forseeable future.
+Пока IPv6 сервера не проверен, DNS Pocket выдаёт только IPv4-адреса. Сервисы,
+доступные только по IPv6, через этот DNS недоступны. Сам IPv6 по-прежнему
+захватывается VPN; отдельной проверки требуют буквальные IPv6-адреса и собственный
+зашифрованный DNS приложений.
 
-Uninstalling
-===
-
-To uninstall Shelter, please delete the work profile first in Settings -> Accounts, and then uninstall the Shelter app normally.
+[Порядок аппаратной проверки](docs/device-checks.md). Сборка и статическая проверка
+APK не заменяют установку, запуск и обновление на POCO F4. Профиль и его данные
+не удаляются автоматически. Публичный выпуск выполняется отдельно после приёмки.

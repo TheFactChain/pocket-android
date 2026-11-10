@@ -24,6 +24,9 @@ import net.typeblog.shelter.util.ApplicationInfoWrapper;
 import net.typeblog.shelter.util.FileProviderProxy;
 import net.typeblog.shelter.util.UriForwardProxy;
 import net.typeblog.shelter.util.Utility;
+import net.typeblog.shelter.util.AuthenticationUtility;
+import net.typeblog.shelter.vpn.ProtectionPolicy;
+import net.typeblog.shelter.vpn.VpnController;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -32,12 +35,14 @@ import java.util.stream.Collectors;
 
 public class ShelterService extends Service {
     public static final int RESULT_CANNOT_INSTALL_SYSTEM_APP = 100001;
+    public static final int RESULT_PROTECTION_REQUIRED = 100002;
 
     private static final int NOTIFICATION_ID = 0x49a11;
     private DevicePolicyManager mPolicyManager = null;
     private boolean mIsProfileOwner = false;
     private PackageManager mPackageManager = null;
     private ComponentName mAdminComponent = null;
+    private VpnController mVpn;
     // When we need to start an activity, we need something else to do it for us
     // as per background limitation of Android 10
     // We mostly need this for app cloning / installation
@@ -49,10 +54,16 @@ public class ShelterService extends Service {
     // main profile and within the application itself.
     private IStartActivityProxy mStartActivityProxy = null;
     private IShelterService.Stub mBinder = new IShelterService.Stub() {
+        @Override public boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws RemoteException {
+            if(code!=IBinder.INTERFACE_TRANSACTION) AuthenticationUtility.requireTrustedBinderCaller();
+            return super.onTransact(code,data,reply,flags);
+        }
         @Override
         public void ping() {
             // Do nothing, just let the other side know we are alive
         }
+
+        @Override public String attest(String nonce){ return AuthenticationUtility.attest(nonce,mIsProfileOwner?"work":"personal"); }
 
         @Override
         public void stopShelterService(boolean kill) {
@@ -66,7 +77,7 @@ public class ShelterService extends Service {
 
                 ((ShelterApplication) getApplication()).unbindShelterService();
 
-                if (kill && !(mIsProfileOwner && FreezeService.hasPendingAppToFreeze())) {
+                if (kill) {
                     // Just kill the entire process if this signal is received and the process has nothing to do
                     System.exit(0);
                 }
@@ -76,11 +87,13 @@ public class ShelterService extends Service {
         @Override
         public void getApps(IGetAppsCallback callback, boolean showAll) {
             new Thread(() -> {
+                try {
                 int pmFlags = PackageManager.MATCH_DISABLED_COMPONENTS | PackageManager.MATCH_UNINSTALLED_PACKAGES;
                 List<ApplicationInfoWrapper> list = mPackageManager.getInstalledApplications(pmFlags)
                         .stream()
                         .filter((it) -> !it.packageName.equals(getPackageName()))
                         .filter((it) -> {
+                            if((it.flags & ApplicationInfo.FLAG_INSTALLED)==0)return false;
                             boolean isSystem = (it.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
                             boolean isHidden = isHidden(it.packageName);
                             boolean isInstalled = (it.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
@@ -103,10 +116,10 @@ public class ShelterService extends Service {
                         })
                         .collect(Collectors.toList());
 
-                try {
                     callback.callback(list);
-                } catch (RemoteException e) {
-                    // Do Nothing
+                } catch (RemoteException | RuntimeException e) {
+                    android.util.Log.w("PocketApps","App list delivery failed: "+e.getClass().getSimpleName());
+                    try {callback.onError(1);}catch(RemoteException | RuntimeException ignored){}
                 }
             }).start();
         }
@@ -126,6 +139,7 @@ public class ShelterService extends Service {
 
         @Override
         public void installApp(ApplicationInfoWrapper app, IAppInstallCallback callback) throws RemoteException {
+            if (!mIsProfileOwner || !ProtectionPolicy.confirmed(ShelterService.this)) { callback.callback(RESULT_PROTECTION_REQUIRED); return; }
             if (!app.isSystem()) {
                 // Installing a non-system app requires firing up PackageInstaller
                 // Delegate this operation to DummyActivity because
@@ -166,6 +180,7 @@ public class ShelterService extends Service {
 
         @Override
         public void installApk(UriForwardProxy uriForwarder, IAppInstallCallback callback) throws RemoteException {
+            if (!mIsProfileOwner || !ProtectionPolicy.confirmed(ShelterService.this)) { callback.callback(RESULT_PROTECTION_REQUIRED); return; }
             // Directly install an APK through a given Fd
             // instead of installing an existing one
             Intent intent = new Intent(DummyActivity.INSTALL_PACKAGE);
@@ -188,6 +203,7 @@ public class ShelterService extends Service {
 
         @Override
         public void uninstallApp(ApplicationInfoWrapper app, IAppInstallCallback callback) throws RemoteException {
+            if (!mIsProfileOwner) { callback.callback(RESULT_CANNOT_INSTALL_SYSTEM_APP); return; }
             if (!app.isSystem()) {
                 // Similarly, fire up DummyActivity to do uninstallation for us
                 Intent intent = new Intent(DummyActivity.UNINSTALL_PACKAGE);
@@ -292,7 +308,20 @@ public class ShelterService extends Service {
                 throw new IllegalStateException("Cross-profile packages support is only available on Android 11 and later");
             mPolicyManager.setCrossProfilePackages(mAdminComponent, new HashSet<>(packages));
         }
+        @Override public String getPocketState() throws RemoteException { return vpn().getPocketState(); }
+        @Override public String listConnections() throws RemoteException { return vpn().listConnections(); }
+        @Override public String readConnection(String id) throws RemoteException { return vpn().readConnection(id); }
+        @Override public String saveConnection(String json) throws RemoteException { return vpn().saveConnection(json); }
+        @Override public void activateConnection(String id) throws RemoteException { vpn().activateConnection(id); }
+        @Override public void deleteConnection(String id) throws RemoteException { vpn().deleteConnection(id); }
+        @Override public void setDirectRu(boolean enabled) throws RemoteException { vpn().setDirectRu(enabled); }
+        @Override public void checkConnectionNow() throws RemoteException { vpn().checkNow(); }
     };
+
+    private net.typeblog.shelter.services.IPocketVpnService vpn(){
+        if(!mIsProfileOwner || mVpn==null) throw new SecurityException("Настройки доступны только в рабочем профиле Pocket");
+        return mVpn.get();
+    }
 
     @Override
     public void onCreate() {
@@ -300,6 +329,10 @@ public class ShelterService extends Service {
         mPackageManager = getPackageManager();
         mIsProfileOwner = mPolicyManager.isProfileOwnerApp(getPackageName());
         mAdminComponent = new ComponentName(getApplicationContext(), ShelterDeviceAdminReceiver.class);
+        if(mIsProfileOwner){
+            try{ ProtectionPolicy.ensure(this); } catch(RuntimeException e){ android.util.Log.w("PocketVPN","Protection policy not confirmed"); }
+            mVpn=new VpnController(this);
+        }
     }
 
     @Nullable
@@ -319,6 +352,11 @@ public class ShelterService extends Service {
         // is closed.
         stopForeground(true);
         return false;
+    }
+
+    @Override public void onDestroy(){
+        if(mVpn!=null)mVpn.close();
+        super.onDestroy();
     }
 
     private boolean isHidden(String packageName) {

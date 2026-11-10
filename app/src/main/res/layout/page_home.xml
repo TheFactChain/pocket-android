@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The only screen: header, state headline, bento cards (proxy, shop) and the apps card that fills the rest.
-     Weights keep everything on one screen; only the icon grid scrolls if there are many copies. -->
+<!-- The only screen: header, two small cards (proxy, updates), the wide shop card in the middle
+     and the apps card that fills the rest. Only the icon grid scrolls if there are many copies. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -13,19 +13,19 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="72dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <FrameLayout
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_circle"
             android:backgroundTint="@color/ink">
 
             <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_gravity="center"
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_pocket"
@@ -36,10 +36,13 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginStart="10dp"
-            android:text="Pocket"
+            android:layout_marginStart="12dp"
+            android:accessibilityHeading="true"
+            android:letterSpacing="-0.01"
+            android:maxLines="1"
+            android:text="Pocket Android"
             android:textColor="@color/ink"
-            android:textSize="17sp"
+            android:textSize="22sp"
             android:textStyle="bold" />
 
         <FrameLayout
@@ -58,33 +61,14 @@
                 android:importantForAccessibility="no"
                 android:src="@drawable/ic_gear"
                 app:tint="@color/ink" />
-
-            <View
-                android:id="@+id/home_settings_dot"
-                android:layout_width="9dp"
-                android:layout_height="9dp"
-                android:layout_gravity="top|end"
-                android:layout_margin="9dp"
-                android:background="@drawable/bg_circle"
-                android:backgroundTint="@color/danger"
-                android:visibility="gone" />
         </FrameLayout>
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/home_headline"
-        style="@style/Headline"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:layout_marginBottom="16dp"
-        android:accessibilityLiveRegion="polite"
-        android:maxLines="2" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="140dp"
+        android:layout_marginTop="4dp"
+        android:minHeight="136dp"
         android:orientation="horizontal">
 
         <LinearLayout
@@ -96,12 +80,9 @@
             android:padding="16dp">
 
             <TextView
-                android:id="@+id/proxy_label"
                 style="@style/CardLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:drawablePadding="6dp"
-                android:gravity="center_vertical"
                 android:text="Прокси" />
 
             <TextView
@@ -121,8 +102,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:maxLines="2"
                 android:ellipsize="end"
+                android:maxLines="2"
                 android:textColor="@color/card_ink_soft"
                 android:textSize="13sp" />
 
@@ -165,7 +146,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/card_shop"
+            android:id="@+id/card_updates"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginStart="10dp"
@@ -177,72 +158,102 @@
                 style="@style/CardLabel"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Магазин" />
+                android:text="Обновления" />
 
             <TextView
-                android:id="@+id/shop_value"
+                android:id="@+id/updates_value"
+                style="@style/CardValue"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="34dp"
                 android:layout_marginTop="4dp"
-                android:maxLines="2"
-                android:ellipsize="end"
-                android:text="Proxy, ChatGPT и Claude"
-                android:textColor="@color/ink"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:letterSpacing="-0.01" />
+                android:autoSizeMaxTextSize="26sp"
+                android:autoSizeMinTextSize="16sp"
+                android:autoSizeTextType="uniform"
+                android:gravity="center_vertical"
+                android:maxLines="1" />
 
             <TextView
+                android:id="@+id/updates_detail"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:layout_marginTop="2dp"
-                android:maxLines="2"
                 android:ellipsize="end"
-                android:text="Оплата и выдача в Telegram"
+                android:maxLines="2"
                 android:textColor="@color/card_ink_soft"
                 android:textSize="13sp" />
 
-            <!-- What is inside: the glyphs of the catalog rows, set from the catalog -->
-            <LinearLayout
-                android:id="@+id/shop_icons"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+            <ImageView
+                android:id="@+id/updates_icon"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:layout_gravity="end"
                 android:layout_marginTop="8dp"
-                android:importantForAccessibility="noHideDescendants"
-                android:orientation="horizontal">
-
-                <ImageView
-                    android:layout_width="34dp"
-                    android:layout_height="34dp"
-                    android:background="@drawable/bg_circle"
-                    android:backgroundTint="@color/ink"
-                    android:padding="8dp"
-                    android:src="@drawable/ic_shield"
-                    app:tint="@android:color/white" />
-
-                <ImageView
-                    android:layout_width="34dp"
-                    android:layout_height="34dp"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_circle"
-                    android:backgroundTint="@color/ink"
-                    android:padding="8dp"
-                    android:src="@drawable/ic_bot"
-                    app:tint="@android:color/white" />
-
-                <ImageView
-                    android:layout_width="34dp"
-                    android:layout_height="34dp"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_circle"
-                    android:backgroundTint="@color/ink"
-                    android:padding="7dp"
-                    android:src="@drawable/ic_claude"
-                    app:tint="@android:color/white" />
-            </LinearLayout>
+                android:background="@drawable/bg_circle"
+                android:backgroundTint="@color/ink"
+                android:importantForAccessibility="no"
+                android:padding="8dp"
+                android:src="@drawable/ic_download"
+                app:tint="@android:color/white" />
         </LinearLayout>
     </LinearLayout>
+
+    <!-- Shop: a sunny gradient card with a big tilted bag behind the text and one chip per kind of goods -->
+    <FrameLayout
+        android:id="@+id/card_shop"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:clipChildren="true"
+        android:contentDescription="Магазин">
+
+        <ImageView
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            android:layout_gravity="end|bottom"
+            android:layout_marginEnd="-26dp"
+            android:layout_marginBottom="-34dp"
+            android:alpha="0.12"
+            android:importantForAccessibility="no"
+            android:rotation="-16"
+            android:src="@drawable/ic_bag"
+            app:tint="@color/ink" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="18dp"
+            android:paddingTop="16dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="16dp">
+
+            <TextView
+                style="@style/CardLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Магазин" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:letterSpacing="-0.02"
+                android:maxLines="2"
+                android:text="Свой прокси и подписки"
+                android:textColor="@color/ink"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+
+            <!-- One chip per kind of goods in the catalog, filled in code -->
+            <LinearLayout
+                android:id="@+id/shop_chips"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:importantForAccessibility="noHideDescendants"
+                android:orientation="horizontal" />
+        </LinearLayout>
+    </FrameLayout>
 
     <LinearLayout
         android:id="@+id/card_apps"

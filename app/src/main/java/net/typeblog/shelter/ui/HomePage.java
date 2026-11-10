@@ -2,30 +2,37 @@ package net.typeblog.shelter.ui;
 
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
-import android.content.res.ColorStateList;
+import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.shop.ShopCatalog;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * The only screen: what matters is always at hand. A headline says the state, the proxy card shows it in one word,
- * the shop card sells the proxy, and the apps card holds the copies. Proxy, settings and shop open as sheets.
+ * The only screen: what matters is always at hand. Proxy and updates are two small cards, the shop is the wide card
+ * in the middle, and the apps card below holds the copies. Proxy, updates, settings and shop open as sheets.
  */
 final class HomePage extends Page {
     final AppsPage apps;
     private final ShopPage shop;
     private final MorePage settings;
-    private TextView headline, proxyValue, proxyDetail, proxyAction, shopValue;
-    private android.widget.LinearLayout shopIcons;
-    private View settingsDot;
-    private android.widget.ImageView proxyIcon;
-    private GradientDrawable proxyFill;
+    private TextView proxyValue, proxyDetail, proxyAction, updatesValue, updatesDetail;
+    private LinearLayout shopChips;
+    private ImageView proxyIcon;
+    private GradientDrawable proxyFill, updatesFill;
     private int proxyColor;
     private PocketStatus status;
 
@@ -38,12 +45,13 @@ final class HomePage extends Page {
 
     @Override View create(LayoutInflater inflater) {
         View root = inflater.inflate(R.layout.page_home, null);
-        headline = root.findViewById(R.id.home_headline);
         proxyValue = root.findViewById(R.id.proxy_value);
         proxyDetail = root.findViewById(R.id.proxy_detail);
         proxyAction = root.findViewById(R.id.proxy_action);
-        settingsDot = root.findViewById(R.id.home_settings_dot);
         proxyIcon = root.findViewById(R.id.proxy_icon);
+        updatesValue = root.findViewById(R.id.updates_value);
+        updatesDetail = root.findViewById(R.id.updates_detail);
+        shopChips = root.findViewById(R.id.shop_chips);
 
         View proxyCard = root.findViewById(R.id.card_proxy);
         proxyColor = a.color(R.color.pastel_lavender);
@@ -55,15 +63,23 @@ final class HomePage extends Page {
             if (status != null) Fixes.run(a, status.action);
         });
 
+        View updatesCard = root.findViewById(R.id.card_updates);
+        updatesFill = fill(a.color(R.color.pastel_blue));
+        updatesCard.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22000000), updatesFill, null));
+        tappable(updatesCard, () -> new UpdatesPage(a).showAsSheet());
+
+        // Sunny diagonal gradient: the one card that is meant to catch the eye.
+        GradientDrawable sun = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[] { a.color(R.color.pastel_yellow), a.color(R.color.pastel_orange), a.color(R.color.pastel_pink) });
+        sun.setCornerRadius(a.dp(28));
         View shopCard = root.findViewById(R.id.card_shop);
-        shopCard.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22000000), fill(a.color(R.color.pastel_yellow)), null));
+        shopCard.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22000000), sun, null));
+        shopCard.setClipToOutline(true);
         tappable(shopCard, shop::showAsSheet);
-        shopValue = root.findViewById(R.id.shop_value);
-        shopIcons = root.findViewById(R.id.shop_icons);
         showCatalog(ShopCatalog.load(a));
         a.worker.execute(() -> {
             try {
-                java.util.List<ShopCatalog.Item> fresh = ShopCatalog.fetch(a);
+                List<ShopCatalog.Item> fresh = ShopCatalog.fetch(a);
                 a.post(() -> showCatalog(fresh));
             } catch (Exception ignored) { /* the built-in or cached catalog stays */ }
         });
@@ -73,29 +89,50 @@ final class HomePage extends Page {
         return root;
     }
 
-    /** The shop card says what is sold, not prices: names and glyphs of the catalog, Proxy first. */
-    private void showCatalog(java.util.List<ShopCatalog.Item> list) {
+    /** One chip per kind of goods in the catalog (Proxy first): what is sold, not prices. */
+    private void showCatalog(List<ShopCatalog.Item> list) {
         if (list == null) return;
-        java.util.List<Integer> glyphs = new java.util.ArrayList<>();
-        java.util.List<String> names = new java.util.ArrayList<>();
+        List<ShopCatalog.Item> kinds = new ArrayList<>();
+        List<Integer> glyphs = new ArrayList<>();
         for (ShopCatalog.Item item : list) {
             int glyph = ShopPage.glyph(item);
             if (glyphs.contains(glyph)) continue;
             int at = glyph == R.drawable.ic_shield ? 0 : glyphs.size();
             glyphs.add(at, glyph);
-            names.add(at, ShopPage.name(item));
+            kinds.add(at, item);
         }
-        StringBuilder text = new StringBuilder();
-        for (int i = 0; i < names.size(); i++) {
-            if (i > 0) text.append(i == names.size() - 1 ? " и " : ", ");
-            text.append(names.get(i));
-        }
-        shopValue.setText(text);
-        for (int i = 0; i < shopIcons.getChildCount(); i++) {
-            android.widget.ImageView icon = (android.widget.ImageView) shopIcons.getChildAt(i);
-            icon.setVisibility(i < glyphs.size() ? View.VISIBLE : View.GONE);
-            if (i < glyphs.size()) icon.setImageResource(glyphs.get(i));
-        }
+        shopChips.removeAllViews();
+        for (int i = 0; i < Math.min(3, kinds.size()); i++) shopChips.addView(chip(glyphs.get(i), ShopPage.name(kinds.get(i))));
+    }
+
+    private View chip(int glyph, String name) {
+        LinearLayout chip = new LinearLayout(a);
+        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setPadding(a.dp(6), a.dp(5), a.dp(12), a.dp(5));
+        GradientDrawable glass = new GradientDrawable();
+        glass.setColor(0xB3FFFFFF);
+        glass.setCornerRadius(a.dp(18));
+        chip.setBackground(glass);
+        ImageView icon = new ImageView(a);
+        icon.setImageResource(glyph);
+        icon.setImageTintList(ColorStateList.valueOf(0xFFFFFFFF));
+        icon.setBackgroundResource(R.drawable.bg_circle);
+        icon.setBackgroundTintList(ColorStateList.valueOf(a.color(R.color.ink)));
+        icon.setPadding(a.dp(5), a.dp(5), a.dp(5), a.dp(5));
+        chip.addView(icon, new LinearLayout.LayoutParams(a.dp(26), a.dp(26)));
+        TextView text = new TextView(a);
+        text.setText(name);
+        text.setTextColor(a.color(R.color.ink));
+        text.setTextSize(13.5f);
+        text.setTypeface(null, Typeface.BOLD);
+        text.setMaxLines(1);
+        LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(-2, -2);
+        tp.setMarginStart(a.dp(7));
+        chip.addView(text, tp);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
+        if (shopChips.getChildCount() > 0) params.setMarginStart(a.dp(8));
+        chip.setLayoutParams(params);
+        return chip;
     }
 
     private GradientDrawable fill(int color) {
@@ -113,7 +150,6 @@ final class HomePage extends Page {
     @Override void onState() {
         view();
         status = PocketStatus.of(a.state, a.linkProblem);
-        headline.setText(status.headline);
         proxyValue.setText(status.word);
         proxyDetail.setText(status.detail);
         proxyAction.setText(status.actionLabel);
@@ -129,7 +165,11 @@ final class HomePage extends Page {
             fade.start();
             proxyColor = target;
         }
-        settingsDot.setVisibility(a.updateOffer != null ? View.VISIBLE : View.GONE);
+        boolean offered = a.updateOffer != null;
+        updatesValue.setText(offered ? "Доступно" : BuildConfig.VERSION_NAME);
+        updatesDetail.setText(offered ? "Версия " + a.updateOffer.versionName + ", нажми, чтобы обновить"
+                : a.updateLatest ? "Последняя версия" : "Нажми, чтобы проверить");
+        updatesFill.setColor(a.color(offered ? R.color.pastel_green : R.color.pastel_blue));
         apps.setStatus(status);
     }
 }

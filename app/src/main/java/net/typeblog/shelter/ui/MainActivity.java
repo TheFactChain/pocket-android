@@ -110,6 +110,8 @@ public class MainActivity extends AppCompatActivity {
     String linkProblem = "Связываем рабочий профиль…";
     int copiesCount = -1;
     net.typeblog.shelter.update.AppUpdater.Manifest updateOffer;
+    /** The last check found no newer version. */
+    boolean updateLatest;
 
     private FrameLayout host;
     private final List<Page> stack = new ArrayList<>();

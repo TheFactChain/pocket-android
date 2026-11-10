@@ -39,7 +39,8 @@ final class UpdatesPage extends Page {
         a.worker.execute(() -> {
             try {
                 AppUpdater.Manifest m = AppUpdater.fetchManifest(feed(), BuildConfig.DEBUG);
-                if (AppUpdater.isNewer(m, BuildConfig.VERSION_CODE)) a.post(() -> { a.updateOffer = m; a.notifyState(); });
+                boolean newer = AppUpdater.isNewer(m, BuildConfig.VERSION_CODE);
+                a.post(() -> { if (newer) a.updateOffer = m; else a.updateLatest = true; a.notifyState(); });
             } catch (Exception ignored) { /* offline or no feed yet: nothing to offer */ }
         });
     }
@@ -75,7 +76,7 @@ final class UpdatesPage extends Page {
                 a.post(() -> {
                     action.setEnabled(true);
                     if (AppUpdater.isNewer(m, BuildConfig.VERSION_CODE)) { a.updateOffer = m; offer(m); a.notifyState(); }
-                    else { status.setText("У тебя последняя версия Pocket."); action.setText("Проверить"); }
+                    else { a.updateLatest = true; a.notifyState(); status.setText("У тебя последняя версия Pocket."); action.setText("Проверить"); }
                 });
             } catch (Exception e) {
                 // GitHub answers 404 for latest/download until the first release is published.

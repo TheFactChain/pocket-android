@@ -124,14 +124,7 @@
         <item name="android:textColor">@color/danger</item>
     </style>
 
-    <!-- One-screen home: big bold headline and bento card texts -->
-    <style name="Headline">
-        <item name="android:textSize">30sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/ink</item>
-        <item name="android:letterSpacing">-0.02</item>
-        <item name="android:lineSpacingMultiplier">0.95</item>
-    </style>
+    <!-- One-screen home: bento card texts -->
 
     <style name="CardLabel">
         <item name="android:textSize">13sp</item>

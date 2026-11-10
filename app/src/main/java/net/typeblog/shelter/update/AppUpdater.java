@@ -29,6 +29,8 @@ import java.util.regex.Pattern;
 /** Проверка и установка обновления APK по манифесту. Сеть и диск: только вне главного потока. */
 public final class AppUpdater {
     public static final String FEED = "https://github.com/TheFactChain/pocket-android/releases/latest/download/update-manifest.json";
+    /** Открытая страница выпусков: там видно каждую версию, её APK и манифест. */
+    public static final String RELEASES = "https://github.com/TheFactChain/pocket-android/releases";
     /** Тестовая лента; принимается только при debug = true. */
     public static final String DEBUG_FEED = "http://127.0.0.1:8765/update-manifest.json";
 

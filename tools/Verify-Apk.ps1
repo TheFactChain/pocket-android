@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][string]$Apk)
+﻿param([Parameter(Mandatory = $true)][string]$Apk)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Environment.ps1')
 $Apk = (Resolve-Path -LiteralPath $Apk).Path

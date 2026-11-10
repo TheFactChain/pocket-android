@@ -91,7 +91,7 @@
             android:id="@+id/card_proxy"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_weight="1.5"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -108,10 +108,13 @@
                 android:id="@+id/proxy_value"
                 style="@style/CardValue"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:layout_height="34dp"
+                android:layout_marginTop="4dp"
+                android:autoSizeMaxTextSize="26sp"
+                android:autoSizeMinTextSize="16sp"
+                android:autoSizeTextType="uniform"
+                android:gravity="center_vertical"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/proxy_detail"
@@ -177,32 +180,67 @@
                 android:text="Магазин" />
 
             <TextView
-                android:id="@+id/shop_price"
-                style="@style/CardValue"
+                android:id="@+id/shop_value"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:maxLines="1" />
+                android:layout_marginTop="4dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:text="Proxy, ChatGPT и Claude"
+                android:textColor="@color/ink"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:letterSpacing="-0.01" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:text="Купить Proxy и подписки"
+                android:layout_marginTop="2dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:text="Оплата и выдача в Telegram"
                 android:textColor="@color/card_ink_soft"
                 android:textSize="13sp" />
 
-            <ImageView
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_gravity="end"
+            <!-- What is inside: the glyphs of the catalog rows, set from the catalog -->
+            <LinearLayout
+                android:id="@+id/shop_icons"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:background="@drawable/bg_circle"
-                android:backgroundTint="@color/ink"
-                android:importantForAccessibility="no"
-                android:padding="8dp"
-                android:src="@drawable/ic_bag"
-                app:tint="@android:color/white" />
+                android:importantForAccessibility="noHideDescendants"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="@drawable/bg_circle"
+                    android:backgroundTint="@color/ink"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_shield"
+                    app:tint="@android:color/white" />
+
+                <ImageView
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_circle"
+                    android:backgroundTint="@color/ink"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_bot"
+                    app:tint="@android:color/white" />
+
+                <ImageView
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/bg_circle"
+                    android:backgroundTint="@color/ink"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_claude"
+                    app:tint="@android:color/white" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 

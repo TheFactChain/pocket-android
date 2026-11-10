@@ -356,10 +356,15 @@ final class AppsPage extends Page {
         body.setPadding(a.dp(18), a.dp(8), a.dp(18), a.dp(16));
         LayoutInflater.from(a).inflate(R.layout.view_sheet_header, body, true);
         ((TextView) body.findViewById(R.id.sheet_title)).setText("Добавить приложение");
-        EditText search = new EditText(new android.view.ContextThemeWrapper(a, R.style.Field), null, 0);
+        // The default EditText style is what makes the field focusable and editable; only the look is ours.
+        EditText search = new EditText(a);
         search.setBackgroundResource(R.drawable.bg_field);
+        search.setTextSize(15);
+        search.setTextColor(a.color(R.color.ink));
+        search.setHintTextColor(a.color(R.color.hint));
         search.setHint("Поиск");
         search.setSingleLine(true);
+        search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH | android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         search.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
         sp.bottomMargin = a.dp(12);

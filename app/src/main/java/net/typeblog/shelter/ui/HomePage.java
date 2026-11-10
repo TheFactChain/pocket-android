@@ -21,7 +21,8 @@ final class HomePage extends Page {
     final AppsPage apps;
     private final ShopPage shop;
     private final MorePage settings;
-    private TextView headline, proxyValue, proxyDetail, proxyAction, shopPrice;
+    private TextView headline, proxyValue, proxyDetail, proxyAction, shopValue;
+    private android.widget.LinearLayout shopIcons;
     private View settingsDot;
     private android.widget.ImageView proxyIcon;
     private GradientDrawable proxyFill;
@@ -41,7 +42,6 @@ final class HomePage extends Page {
         proxyValue = root.findViewById(R.id.proxy_value);
         proxyDetail = root.findViewById(R.id.proxy_detail);
         proxyAction = root.findViewById(R.id.proxy_action);
-        shopPrice = root.findViewById(R.id.shop_price);
         settingsDot = root.findViewById(R.id.home_settings_dot);
         proxyIcon = root.findViewById(R.id.proxy_icon);
 
@@ -58,11 +58,44 @@ final class HomePage extends Page {
         View shopCard = root.findViewById(R.id.card_shop);
         shopCard.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22000000), fill(a.color(R.color.pastel_yellow)), null));
         tappable(shopCard, shop::showAsSheet);
-        shopPrice.setText(proxyPrice());
+        shopValue = root.findViewById(R.id.shop_value);
+        shopIcons = root.findViewById(R.id.shop_icons);
+        showCatalog(ShopCatalog.load(a));
+        a.worker.execute(() -> {
+            try {
+                java.util.List<ShopCatalog.Item> fresh = ShopCatalog.fetch(a);
+                a.post(() -> showCatalog(fresh));
+            } catch (Exception ignored) { /* the built-in or cached catalog stays */ }
+        });
 
         tappable(root.findViewById(R.id.home_settings), settings::showAsSheet);
         apps.bind(root.findViewById(R.id.card_apps));
         return root;
+    }
+
+    /** The shop card says what is sold, not prices: names and glyphs of the catalog, Proxy first. */
+    private void showCatalog(java.util.List<ShopCatalog.Item> list) {
+        if (list == null) return;
+        java.util.List<Integer> glyphs = new java.util.ArrayList<>();
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (ShopCatalog.Item item : list) {
+            int glyph = ShopPage.glyph(item);
+            if (glyphs.contains(glyph)) continue;
+            int at = glyph == R.drawable.ic_shield ? 0 : glyphs.size();
+            glyphs.add(at, glyph);
+            names.add(at, ShopPage.name(item));
+        }
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) text.append(i == names.size() - 1 ? " и " : ", ");
+            text.append(names.get(i));
+        }
+        shopValue.setText(text);
+        for (int i = 0; i < shopIcons.getChildCount(); i++) {
+            android.widget.ImageView icon = (android.widget.ImageView) shopIcons.getChildAt(i);
+            icon.setVisibility(i < glyphs.size() ? View.VISIBLE : View.GONE);
+            if (i < glyphs.size()) icon.setImageResource(glyphs.get(i));
+        }
     }
 
     private GradientDrawable fill(int color) {
@@ -75,11 +108,6 @@ final class HomePage extends Page {
     private void tappable(View view, Runnable action) {
         view.setStateListAnimator(android.animation.AnimatorInflater.loadStateListAnimator(a, R.animator.tap));
         view.setOnClickListener(v -> { v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); action.run(); });
-    }
-
-    private String proxyPrice() {
-        for (ShopCatalog.Item item : ShopCatalog.load(a)) if (item.id.equals("proxy")) return item.priceText();
-        return "Proxy";
     }
 
     @Override void onState() {

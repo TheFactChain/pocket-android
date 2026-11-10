@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Pocket mark: a phone whose four panes show the colour behind it (as the Windows monitor logo) -->
+<!-- Pocket mark: a phone with the Android robot on its screen -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
     <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
-        android:pathData="M8,1.5h8a2.5,2.5 0 0,1 2.5,2.5v16a2.5,2.5 0 0,1 -2.5,2.5H8a2.5,2.5 0 0,1 -2.5,-2.5V4A2.5,2.5 0 0,1 8,1.5z M8.2,6.2h3.2v3.2H8.2z M12.6,6.2h3.2v3.2h-3.2z M8.2,10.6h3.2v3.2H8.2z M12.6,10.6h3.2v3.2h-3.2z M10.5,18.2h3a0.8,0.8 0 0,1 0,1.6h-3a0.8,0.8 0 0,1 0,-1.6z" />
+        android:pathData="M8,1.5h8a2.5,2.5 0 0,1 2.5,2.5v16a2.5,2.5 0 0,1 -2.5,2.5H8a2.5,2.5 0 0,1 -2.5,-2.5V4A2.5,2.5 0 0,1 8,1.5z M7,3.5h10v15.5H7z M8.4,13.2a3.6,3.6 0 0,1 7.2,0z M10.6,11.45a0.5,0.5 0 1,0 0,1 0.5,0.5 0 1,0 0,-1z M13.4,11.45a0.5,0.5 0 1,0 0,1 0.5,0.5 0 1,0 0,-1z M8.4,13.9h7.2v3.4a0.8,0.8 0 0,1 -0.8,0.8h-5.6a0.8,0.8 0 0,1 -0.8,-0.8z M10.5,20.15h3a0.6,0.6 0 0,1 0,1.2h-3a0.6,0.6 0 0,1 0,-1.2z" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="0.8" android:strokeLineCap="round"
+        android:pathData="M9.9,10.1L9.1,8.8 M14.1,10.1L14.9,8.8" />
 </vector>

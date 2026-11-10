@@ -47,6 +47,8 @@ final class UpdatesPage extends Page {
     @Override void build() {
         LinearLayout group = group();
         version = row(group, R.drawable.ic_download, R.color.green, "Pocket " + BuildConfig.VERSION_NAME, "Установлена эта версия");
+        row(group, R.drawable.ic_globe, R.color.accent, "Все версии на GitHub", "Открытый репозиторий TheFactChain/pocket-android")
+                .setOnClickListener(v -> a.openUrl(AppUpdater.RELEASES));
         status = caption(content, "");
         progress = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(1000);
@@ -73,10 +75,13 @@ final class UpdatesPage extends Page {
                 a.post(() -> {
                     action.setEnabled(true);
                     if (AppUpdater.isNewer(m, BuildConfig.VERSION_CODE)) { a.updateOffer = m; offer(m); a.notifyState(); }
-                    else { status.setText("Новых версий нет."); action.setText("Проверить"); }
+                    else { status.setText("У тебя последняя версия Pocket."); action.setText("Проверить"); }
                 });
             } catch (Exception e) {
-                a.post(() -> { action.setEnabled(true); status.setText("Источник обновлений недоступен. Проверь позже."); action.setText("Проверить"); });
+                // GitHub answers 404 for latest/download until the first release is published.
+                String why = e.getMessage() != null && e.getMessage().contains("404")
+                        ? "На GitHub пока нет опубликованной версии." : "Нет связи с GitHub. Проверь интернет и повтори.";
+                a.post(() -> { action.setEnabled(true); status.setText(why); action.setText("Проверить"); });
             }
         });
     }

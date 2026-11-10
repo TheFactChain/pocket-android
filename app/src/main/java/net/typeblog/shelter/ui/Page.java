@@ -39,6 +39,9 @@ abstract class Page {
     /** Pages that may show passwords keep them out of screenshots. */
     boolean secure() { return false; }
 
+    /** A sheet with «Закрыть»; without it the sheet closes by a tap outside or a swipe. */
+    boolean closeButton() { return true; }
+
     private com.google.android.material.bottomsheet.BottomSheetDialog sheetDialog;
 
     boolean showing() { return sheetDialog != null && sheetDialog.isShowing(); }
@@ -50,7 +53,19 @@ abstract class Page {
         root.setBackground(null); // the sheet draws the rounded page background
         if (root.getParent() != null) ((android.view.ViewGroup) root.getParent()).removeView(root);
         TextView back = root.findViewById(R.id.page_back);
-        if (back != null) {
+        if (back != null && !closeButton()) {
+            if (back.getVisibility() == View.GONE) { /* the grabber is already there from an earlier showing */ } else {
+            // No button: a tap outside or a swipe down dismisses; the grabber says so.
+            back.setVisibility(View.GONE);
+            View grabber = new View(a);
+            grabber.setBackgroundResource(R.drawable.bg_capsule);
+            grabber.setBackgroundTintList(android.content.res.ColorStateList.valueOf(a.color(R.color.hint)));
+            android.widget.FrameLayout.LayoutParams gp = new android.widget.FrameLayout.LayoutParams(a.dp(36), a.dp(4),
+                    android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL);
+            gp.topMargin = a.dp(8);
+            ((android.view.ViewGroup) back.getParent()).addView(grabber, gp);
+            }
+        } else if (back != null) {
             back.setText("Закрыть");
             back.setOnClickListener(v -> sheetDialog.dismiss());
         }

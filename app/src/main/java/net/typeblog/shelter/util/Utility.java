@@ -128,7 +128,6 @@ public class Utility {
     public static void enforceWorkProfilePolicies(Context context) {
         DevicePolicyManager manager = context.getSystemService(DevicePolicyManager.class);
         ComponentName adminComponent = new ComponentName(context.getApplicationContext(), ShelterDeviceAdminReceiver.class);
-
         // Hide this app in the work profile
         context.getPackageManager().setComponentEnabledSetting(
                 new ComponentName(context.getApplicationContext(), MainActivity.class),
@@ -179,6 +178,7 @@ public class Utility {
         }
 
         net.typeblog.shelter.vpn.ProtectionPolicy.ensure(context);
+        manager.clearUserRestriction(adminComponent, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES);
         manager.setProfileEnabled(adminComponent);
     }
 

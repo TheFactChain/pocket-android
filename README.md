@@ -47,10 +47,11 @@ Build выполняет unit-тесты, lint, сборку release/debug, inst
 папке и освобождает его после сборки; исходники не перемещаются. Build-tools 36
 также исправляет неэкранированные пути в генерируемых Java-комментариях.
 Результат: `app/build/outputs/apk/release/app-release.apk`.
-Для проверки следующего обновления увеличь versionCode относительно установленной сборки:
+По умолчанию versionCode и versionName берутся из `app/build.gradle`; для выпуска
+поднимай их там. Разовая проверочная сборка с другим versionCode:
 
 ```powershell
-.\tools\Build.ps1 -VersionCode 6
+.\tools\Build.ps1 -VersionCode 14
 ```
 
 Подпись находится в `.local/signing/`: приватный ключ и пароль доступны текущему

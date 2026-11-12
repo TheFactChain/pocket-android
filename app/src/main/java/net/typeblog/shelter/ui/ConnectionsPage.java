@@ -163,8 +163,11 @@ final class ConnectionsPage extends Page {
         } else a.toast(message);
     }
 
-    /** Link, list of links, a Pocket Windows file or a sing-box config: saved, and the first one is used. */
+    /** Link, list of links, a Pocket Windows file or a sing-box config: saved; the first one is used only if none is selected yet. */
     void importText(String text, TextView errorView) {
+        // Unknown state counts as "something may be selected", so nothing is swapped blindly.
+        String current = a.state == null ? "?" : a.state.optString("selectedId");
+        String currentName = a.state == null ? "" : a.state.optString("selectedName");
         a.worker.execute(() -> {
             ProfileImporter.Result result;
             try { result = ProfileImporter.parseForInterface(text); }
@@ -176,14 +179,20 @@ final class ConnectionsPage extends Page {
                     String id = a.mServiceWork.saveConnection(profile.toJson().toString());
                     if (first == null) first = id;
                 }
-                a.mServiceWork.activateConnection(first);
+                // A working connection is never swapped silently: the user picks the new one in the list.
+                boolean keep = !current.isEmpty();
+                if (!keep) a.mServiceWork.activateConnection(first);
                 String name = result.profiles.get(0).name;
                 int count = result.profiles.size();
                 String warning = result.warnings.isEmpty() ? "" : " " + result.warnings.get(0);
+                String added = count == 1 ? "Добавлено «" + name + "»." : "Добавлено подключений: " + count + ".";
+                String message = keep
+                        ? added + " Текущее подключение" + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено; выбери новое в списке."
+                        : (count == 1 ? "Готово: «" + name + "» используется." : added + " Используется «" + name + "».");
                 a.post(() -> {
                     if (sheet != null) sheet.dismiss();
                     a.openConnections();
-                    a.toast((count == 1 ? "Готово: «" + name + "» используется." : "Добавлено подключений: " + count + ". Используется «" + name + "».") + warning);
+                    a.toast(message + warning);
                     a.refreshState();
                 });
             } catch (Exception e) {

@@ -30,6 +30,7 @@ import net.typeblog.shelter.services.IShelterService;
 import net.typeblog.shelter.services.ShelterService;
 import net.typeblog.shelter.util.ApplicationInfoWrapper;
 import net.typeblog.shelter.util.AuthenticationUtility;
+import net.typeblog.shelter.util.LocalStorageManager;
 import net.typeblog.shelter.util.Utility;
 
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ import java.util.Map;
 /** The «Приложения» card of the home screen: copies as an icon grid. Tap opens, hold for more, «+» adds. */
 final class AppsPage extends Page {
     private static final int COLUMNS = 4;
+    private static final String PREF_SYSTEM_COPIES = "pocket_system_copies";
     private LinearLayout grid;
     private TextView note, count;
     private android.widget.ImageView add;
@@ -87,10 +89,22 @@ final class AppsPage extends Page {
         loadApps(a.mServiceWork, apps -> {
             if (current != request) return;
             copies = new ArrayList<>();
-            for (ApplicationInfoWrapper app : apps) if (!app.isSystem()) copies.add(app);
+            // Preinstalled apps already enabled in the profile (Play Store, Settings) stay out; only ones Pocket enabled show.
+            for (ApplicationInfoWrapper app : apps) if (!app.isSystem() || (!app.isHidden() && isSystemCopy(app))) copies.add(app);
             a.copiesCount = copies.size();
             render();
         }, () -> { if (current == request) { loaded = false; note.setText("Не удалось загрузить копии. Открой Pocket снова."); } });
+    }
+
+    /** System apps share the personal APK: Pocket enables them in the profile and remembers which ones it enabled. */
+    private static boolean isSystemCopy(ApplicationInfoWrapper app) {
+        return LocalStorageManager.getInstance().stringListContains(PREF_SYSTEM_COPIES, app.getPackageName());
+    }
+
+    private static void markSystemCopy(ApplicationInfoWrapper app, boolean present) {
+        LocalStorageManager storage = LocalStorageManager.getInstance();
+        storage.removeFromStringList(PREF_SYSTEM_COPIES, app.getPackageName());
+        if (present) storage.appendStringList(PREF_SYSTEM_COPIES, app.getPackageName());
     }
 
     interface AppsDone { void accept(List<ApplicationInfoWrapper> apps); }
@@ -260,7 +274,8 @@ final class AppsPage extends Page {
         BottomSheetDialog menu = new BottomSheetDialog(a);
         menuRow(group, menu, R.drawable.ic_apps, R.color.pastel_blue, "Открыть", () -> launch(app));
         menuRow(group, menu, R.drawable.ic_add, R.color.pastel_green, "Ярлык на экран", () -> shortcut(app));
-        menuRow(group, menu, R.drawable.ic_download, R.color.pastel_lavender, "Обновить копию", () -> update(app));
+        // A system copy runs the personal APK, so it updates together with it.
+        if (!app.isSystem()) menuRow(group, menu, R.drawable.ic_download, R.color.pastel_lavender, "Обновить копию", () -> update(app));
         RowView remove = menuRow(group, menu, R.drawable.ic_warning, R.color.pastel_orange, "Удалить копию", () -> confirmRemove(app));
         remove.setTitleColor(a.color(R.color.danger));
         menu.setContentView(body);
@@ -309,7 +324,9 @@ final class AppsPage extends Page {
     private void confirmRemove(ApplicationInfoWrapper app) {
         new AlertDialog.Builder(a)
                 .setTitle("Удалить копию «" + app.getLabel() + "»?")
-                .setMessage("Копия и её данные в Pocket будут удалены. Личное приложение и его данные сохранятся.")
+                .setMessage(app.isSystem()
+                        ? "Системная копия будет скрыта из Pocket; её данные в Pocket сохранятся до повторного добавления. Личное приложение не изменится."
+                        : "Копия и её данные в Pocket будут удалены. Личное приложение и его данные сохранятся.")
                 .setPositiveButton("Удалить копию", (d, w) -> {
                     a.toast("Удаляем копию…", true);
                     try { a.mServiceWork.uninstallApp(app, callback(app, false, "Копия удалена")); }
@@ -331,10 +348,11 @@ final class AppsPage extends Page {
                 AuthenticationUtility.requireTrustedBinderCaller();
                 a.post(() -> {
                     if (result == Activity.RESULT_OK) {
+                        if (app.isSystem()) markSystemCopy(app, install);
                         a.toast(success + ": «" + app.getLabel() + "».");
                         reload();
                     } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {
-                        a.toast(install ? "Системное приложение нельзя скопировать." : "Системную копию нельзя удалить.");
+                        a.toast(install ? "Это системное приложение нельзя включить в Pocket на этом телефоне." : "Системную копию нельзя удалить.");
                     } else if (result == ShelterService.RESULT_PROTECTION_REQUIRED) {
                         a.toast("Сначала включи защиту: нажми карточку «Прокси».");
                     } else if (result == ShelterService.RESULT_NO_SPACE) {
@@ -407,13 +425,15 @@ final class AppsPage extends Page {
             List<String> present = new ArrayList<>();
             for (ApplicationInfoWrapper copy : copies) present.add(copy.getPackageName());
             List<ApplicationInfoWrapper> personal = new ArrayList<>();
-            for (ApplicationInfoWrapper app : apps) if (!app.isSystem() && !present.contains(app.getPackageName())) personal.add(app);
+            // getApps already keeps only launchable or user-installed packages, so system apps like Gmail belong here too.
+            for (ApplicationInfoWrapper app : apps) if (!present.contains(app.getPackageName())) personal.add(app);
             Runnable fill = () -> {
                 group.removeAllViews();
                 String q = search.getText().toString().trim().toLowerCase(Locale.ROOT);
                 for (ApplicationInfoWrapper app : personal) {
                     if (!q.isEmpty() && !app.getLabel().toLowerCase(Locale.ROOT).contains(q)) continue;
                     RowView row = appRow(group, app, a.mServiceMain);
+                    if (app.isSystem()) row.setCaption("Системное: тот же APK, данные отдельные");
                     row.setOnClickListener(v -> { current.dismiss(); install(app, "Готово, копия создана"); });
                 }
                 if (group.getChildCount() == 0) {

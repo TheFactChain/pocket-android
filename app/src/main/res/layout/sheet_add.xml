@@ -25,7 +25,7 @@
             android:layout_marginStart="2dp"
             android:layout_marginBottom="5dp"
             android:labelFor="@id/link_input"
-            android:text="Ссылка от сервера" />
+            android:text="Ссылка на подписку или сервер" />
 
         <EditText
             android:id="@+id/link_input"
@@ -41,7 +41,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="2dp"
             android:layout_marginTop="6dp"
-            android:text="hysteria2://, socks5://, http:// или https://, как выдал бот или панель" />
+            android:text="Подписка https://…, vless://, hysteria2://, socks5:// — как выдал бот или панель" />
     </LinearLayout>
 
     <TextView

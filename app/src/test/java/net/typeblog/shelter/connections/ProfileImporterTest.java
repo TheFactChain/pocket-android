@@ -188,8 +188,9 @@ public class ProfileImporterTest {
         rejected("hy2://TOP_SECRET@vpn.example?obfs=unknown&obfs-password=test");
         rejected("hy2://TOP_SECRET@vpn.example?obfs-password=test");
         rejected(VLESS + "&spx=%2FTOP_SECRET");
-        rejected(VLESS.replace("type=tcp", "type=ws"));
+        rejected(VLESS.replace("type=tcp", "type=xhttp"));
         rejected(VLESS.replace("encryption=none", "encryption=auto"));
+        rejected(VLESS.replace("security=reality", "security=none"));
         rejected(VLESS.replace("security=reality", "security=tls"));
         rejected(VLESS + "&fp=unrecognized");
         rejected(VLESS + "&flow=unknown");
@@ -201,7 +202,7 @@ public class ProfileImporterTest {
         outbound.remove("detour");
         rejected(outbound.put("network", "tcp").toString());
         outbound.remove("network");
-        rejected(outbound.put("transport", new JSONObject().put("type", "ws")).toString());
+        rejected(outbound.put("transport", new JSONObject().put("type", "httpupgrade")).toString());
         outbound.remove("transport");
         outbound.getJSONObject("tls").put("certificate_path", "TOP_SECRET");
         rejected(outbound.toString());
@@ -370,14 +371,9 @@ public class ProfileImporterTest {
         rejected("{\"protocol\":\"http\",\"host\":\"h.example\",\"port\":80,\"tls_server_name\":\"x.example\"}");
     }
 
-    @Test public void interfaceImportHidesVless() {
-        try {
-            ProfileImporter.parseForInterface(VLESS);
-            fail("VLESS must not reach the interface");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("VLESS"));
-        }
-        assertEquals(1, ProfileImporter.parseForInterface(VLESS + "\nhy2://pw@vpn.example").profiles.size());
+    @Test public void interfaceImportAcceptsVless() {
+        assertEquals("vless", ProfileImporter.parseForInterface(VLESS).profiles.get(0).type);
+        assertEquals(2, ProfileImporter.parseForInterface(VLESS + "\nhy2://pw@vpn.example").profiles.size());
     }
 
     @Test public void storedProfileWithoutUsernameStillLoads() throws Exception {

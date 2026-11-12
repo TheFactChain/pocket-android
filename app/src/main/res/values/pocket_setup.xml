@@ -3,5 +3,15 @@
     <string name="setup_profile_blocked_title">Android cannot create a work profile yet</string>
     <string name="setup_profile_blocked_text">A work profile may remain from an earlier installation, or Android may restrict creating one.\n\nOpen the system settings and check who manages the existing profile. Remove it only if you are sure it is your old Pocket profile and you no longer need its data. Removing a profile deletes all apps and data inside it. Do not remove a profile managed by another app or organization.\n\nAfter removing the old profile, return to Pocket. Setup will continue when Android allows creating a new profile.</string>
     <string name="setup_profile_open_settings">Open settings</string>
+    <string name="setup_profile_remove_action">Remove profile</string>
+    <string name="setup_profile_remove_text">A work profile may remain from an earlier installation, or Android may restrict creating one.\n\nIf this is your old Pocket profile, select Remove profile. Pocket will check the profile and ask you to confirm deletion. Removing it permanently deletes all apps and data inside it. Personal apps and data stay on the phone.\n\nA profile belonging to another app or organization cannot be removed by Pocket. If automatic removal is unavailable, Pocket will offer system settings.</string>
+    <string name="setup_profile_removing_text">Waiting for Android to remove the old profile. Setup will continue only after its removal is confirmed.</string>
     <string name="setup_profile_settings_unavailable">Could not open settings. Open your phone settings, find work profiles or accounts, then return to Pocket and try setup again.</string>
+    <string name="remove_pocket_title">Remove this Pocket profile?</string>
+    <string name="remove_pocket_message">All apps and data in this Pocket work profile will be permanently deleted, including saved connections. Personal apps and data will stay on the phone.\n\nAfter removal, Pocket can offer to create a new work profile.</string>
+    <string name="remove_pocket_confirm">Remove profile and data</string>
+    <string name="remove_pocket_cancel">Cancel</string>
+    <string name="remove_pocket_unavailable_title">Could not remove the profile</string>
+    <string name="remove_pocket_unavailable_message">Android has not yet allowed Pocket to remove this profile. If you just updated Pocket, restart the phone and try again. Or open system settings and remove only your old Pocket profile if you no longer need its apps and data. Then return to Pocket to continue setup.</string>
+    <string name="remove_pocket_open_settings">Open settings</string>
 </resources>

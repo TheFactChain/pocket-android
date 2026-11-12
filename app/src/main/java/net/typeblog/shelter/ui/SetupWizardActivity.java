@@ -18,8 +18,14 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.CrossProfileApps;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -37,6 +43,8 @@ import net.typeblog.shelter.util.AuthenticationUtility;
 import net.typeblog.shelter.util.LocalStorageManager;
 import net.typeblog.shelter.util.Utility;
 
+import java.util.List;
+
 public class SetupWizardActivity extends AppCompatActivity {
     // RESUME_SETUP should be used when MainActivity detects the provisioning has been
     // finished by the system, but the Shelter inside the profile has never been brought up
@@ -47,11 +55,39 @@ public class SetupWizardActivity extends AppCompatActivity {
 
     private DevicePolicyManager mPolicyManager = null;
     private LocalStorageManager mStorage = null;
+    private static final String STATE_REMOVAL_PROFILE = "removal_profile";
+    private static final String STATE_REMOVAL_SERIAL = "removal_serial";
+    private static final String STATE_REMOVAL_DEADLINE = "removal_deadline";
+    private static final long REMOVAL_TIMEOUT_MS = 15000;
+    private final Handler mRemovalHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mCheckRemoval = this::checkProfileRemoval;
+    private UserHandle mRemovalProfile;
+    private long mRemovalSerial = -1;
+    private long mRemovalDeadline;
 
     private final ActivityResultLauncher<Void> mProvisionProfile =
             registerForActivityResult(new ProfileProvisionContract(), this::setupProfileCb);
     private final ActivityResultLauncher<Intent> mManageProfile =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> setupProfile());
+    private final ActivityResultLauncher<Intent> mPairBeforeRemoval =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == RESULT_OK) launchProfileRemoval();
+                else showProfileSettingsFallback();
+            });
+    private final ActivityResultLauncher<Intent> mRemoveProfile =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() == PairProfileActivity.RESULT_REMOVAL_CANCELED) {
+                    clearRemovalWait();
+                    switchToFragment(new ProfileBlockedFragment(), false);
+                } else if (result.getResultCode() == PairProfileActivity.RESULT_REMOVAL_UNAVAILABLE
+                        || mRemovalProfile == null) {
+                    showProfileSettingsFallback();
+                } else {
+                    mRemovalDeadline = SystemClock.elapsedRealtime() + REMOVAL_TIMEOUT_MS;
+                    switchToFragment(new RemovingProfileFragment(), false);
+                    mRemovalHandler.post(mCheckRemoval);
+                }
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,6 +106,11 @@ public class SetupWizardActivity extends AppCompatActivity {
         setContentView(R.layout.activity_setup_wizard);
         mPolicyManager = getSystemService(DevicePolicyManager.class);
         mStorage = LocalStorageManager.getInstance();
+        if (savedInstanceState != null) {
+            mRemovalProfile = savedInstanceState.getParcelable(STATE_REMOVAL_PROFILE);
+            mRemovalSerial = savedInstanceState.getLong(STATE_REMOVAL_SERIAL, -1);
+            mRemovalDeadline = savedInstanceState.getLong(STATE_REMOVAL_DEADLINE);
+        }
         // Don't use switchToFragment for the first time
         // because we don't want animation for the first fragment
         // (it would have nothing to animate upon, resulting in a black background)
@@ -81,6 +122,26 @@ public class SetupWizardActivity extends AppCompatActivity {
                                     new ActionRequiredFragment() : new WelcomeFragment())
                     .commit();
         }
+    }
+
+    @Override protected void onPostResume() {
+        super.onPostResume();
+        if (mRemovalProfile != null && mRemovalDeadline != 0) {
+            mRemovalHandler.removeCallbacks(mCheckRemoval);
+            mRemovalHandler.post(mCheckRemoval);
+        }
+    }
+
+    @Override protected void onStop() {
+        mRemovalHandler.removeCallbacks(mCheckRemoval);
+        super.onStop();
+    }
+
+    @Override protected void onSaveInstanceState(@NonNull Bundle state) {
+        state.putParcelable(STATE_REMOVAL_PROFILE, mRemovalProfile);
+        state.putLong(STATE_REMOVAL_SERIAL, mRemovalSerial);
+        state.putLong(STATE_REMOVAL_DEADLINE, mRemovalDeadline);
+        super.onSaveInstanceState(state);
     }
 
     @Override
@@ -129,6 +190,7 @@ public class SetupWizardActivity extends AppCompatActivity {
     }
 
     private void openProfileSettings() {
+        clearRemovalWait();
         for (String action : new String[]{Settings.ACTION_SYNC_SETTINGS, Settings.ACTION_SETTINGS}) {
             try {
                 mManageProfile.launch(new Intent(action));
@@ -138,6 +200,88 @@ public class SetupWizardActivity extends AppCompatActivity {
             }
         }
         Toast.makeText(this, R.string.setup_profile_settings_unavailable, Toast.LENGTH_LONG).show();
+    }
+
+    private void removeOldPocketProfile() {
+        if (mRemovalProfile != null) return;
+        try {
+            CrossProfileApps apps = getSystemService(CrossProfileApps.class);
+            UserManager users = getSystemService(UserManager.class);
+            List<UserHandle> profiles = apps.getTargetUserProfiles();
+            if (profiles.size() != 1) {
+                showProfileSettingsFallback();
+                return;
+            }
+            UserHandle profile = profiles.get(0);
+            long serial = users.getSerialNumberForUser(profile);
+            if (serial < 0 || profile.equals(android.os.Process.myUserHandle())) {
+                showProfileSettingsFallback();
+                return;
+            }
+            mRemovalProfile = profile;
+            mRemovalSerial = serial;
+            Intent pairing = new Intent(DummyActivity.AUTHENTICATE);
+            AuthenticationUtility.putPairingRequest(pairing);
+            Utility.transferIntentToProfileUnsigned(this, pairing);
+            mPairBeforeRemoval.launch(pairing);
+        } catch (RuntimeException unavailable) {
+            showProfileSettingsFallback();
+        }
+    }
+
+    private void launchProfileRemoval() {
+        try {
+            List<UserHandle> profiles = getSystemService(CrossProfileApps.class).getTargetUserProfiles();
+            if (mRemovalProfile == null || mRemovalSerial < 0 || profiles.size() != 1
+                    || !mRemovalProfile.equals(profiles.get(0))
+                    || getSystemService(UserManager.class).getSerialNumberForUser(mRemovalProfile) != mRemovalSerial) {
+                showProfileSettingsFallback();
+                return;
+            }
+            Intent remove = new Intent(DummyActivity.AUTHENTICATE);
+            remove.putExtra(PairProfileActivity.EXTRA_REMOVE_PROFILE_SERIAL, mRemovalSerial);
+            Utility.transferIntentToProfile(this, remove);
+            mRemoveProfile.launch(remove);
+        } catch (RuntimeException unavailable) {
+            showProfileSettingsFallback();
+        }
+    }
+
+    private void checkProfileRemoval() {
+        if (!getLifecycle().getCurrentState().isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+                || mRemovalProfile == null || mRemovalDeadline == 0) return;
+        try {
+            boolean remains = getSystemService(UserManager.class).getUserProfiles().contains(mRemovalProfile);
+            if (!remains && mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE)) {
+                clearRemovalWait();
+                setupProfile();
+                return;
+            }
+            long now = SystemClock.elapsedRealtime();
+            if (now < mRemovalDeadline && mRemovalDeadline - now <= REMOVAL_TIMEOUT_MS) {
+                mRemovalHandler.postDelayed(mCheckRemoval, 500);
+                return;
+            }
+        } catch (RuntimeException unavailable) {
+            // Do not create another profile unless the original removal is confirmed.
+        }
+        showProfileSettingsFallback();
+    }
+
+    private void clearRemovalWait() {
+        mRemovalHandler.removeCallbacks(mCheckRemoval);
+        mRemovalProfile = null;
+        mRemovalSerial = -1;
+        mRemovalDeadline = 0;
+    }
+
+    private void showProfileSettingsFallback() {
+        clearRemovalWait();
+        ProfileBlockedFragment fragment = new ProfileBlockedFragment();
+        Bundle args = new Bundle();
+        args.putBoolean("settings_only", true);
+        fragment.setArguments(args);
+        switchToFragment(fragment, false);
     }
 
     private void setupProfileCb(Boolean result) {
@@ -400,12 +544,16 @@ public class SetupWizardActivity extends AppCompatActivity {
     }
 
     public static class ProfileBlockedFragment extends TextWizardFragment {
+        private boolean settingsOnly() {
+            return getArguments() != null && getArguments().getBoolean("settings_only");
+        }
+
         @Override protected int getLayoutResource() {
             return R.layout.fragment_setup_wizard_generic_text;
         }
 
         @Override protected int getTextRes() {
-            return R.string.setup_profile_blocked_text;
+            return settingsOnly() ? R.string.setup_profile_blocked_text : R.string.setup_profile_remove_text;
         }
 
         @Override public void onNavigateBack() {
@@ -413,13 +561,33 @@ public class SetupWizardActivity extends AppCompatActivity {
         }
 
         @Override public void onNavigateNext() {
-            mActivity.openProfileSettings();
+            if (settingsOnly()) mActivity.openProfileSettings();
+            else mActivity.removeOldPocketProfile();
         }
 
         @Override public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
             super.onViewCreated(view, savedInstanceState);
             mWizard.setHeaderText(R.string.setup_profile_blocked_title);
-            mWizard.getNavigationBar().getNextButton().setText(R.string.setup_profile_open_settings);
+            mWizard.getNavigationBar().getNextButton().setText(settingsOnly()
+                    ? R.string.setup_profile_open_settings : R.string.setup_profile_remove_action);
+        }
+    }
+
+    public static class RemovingProfileFragment extends TextWizardFragment {
+        @Override protected int getLayoutResource() {
+            return R.layout.fragment_setup_wizard_generic_text;
+        }
+
+        @Override protected int getTextRes() {
+            return R.string.setup_profile_removing_text;
+        }
+
+        @Override public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+            mWizard.setHeaderText(R.string.setup_wizard_please_wait);
+            mWizard.setProgressBarShown(true);
+            mWizard.getNavigationBar().getBackButton().setVisibility(View.GONE);
+            mWizard.getNavigationBar().getNextButton().setVisibility(View.GONE);
         }
     }
 

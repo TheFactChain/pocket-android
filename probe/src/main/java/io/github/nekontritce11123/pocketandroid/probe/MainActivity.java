@@ -30,8 +30,8 @@ public final class MainActivity extends Activity {
     private TextView results;
     private String lastResult = "Выбери проверку. Запросы идут через обычную сеть текущего профиля.";
     private URL target;
-    private String resolveHost, udpHost;
-    private int udpPort, interval;
+    private String resolveHost, udpHost, leakUrl, salt;
+    private int udpPort, interval, durationMinutes = 5;
     private boolean configured;
     private String launchError;
 
@@ -77,7 +77,7 @@ public final class MainActivity extends Activity {
         scroll.addView(results);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
-        configure(getIntent(), savedInstanceState == null && !ProbeService.isRunning());
+        configure(getIntent(), savedInstanceState == null);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED && savedInstanceState == null) {
             requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
@@ -119,13 +119,19 @@ public final class MainActivity extends Activity {
                 udpHost = TargetValidation.host(udpHost);
                 udpPort = TargetValidation.port(udpPort);
             }
+            leakUrl = localTarget.getProperty("leakUrl");
+            salt = localTarget.getProperty("salt");
+            durationMinutes = Integer.parseInt(localTarget.getProperty("durationMinutes", "5"));
             configured = true;
             lastResult = "URL: " + target + "\nDNS: " + resolveHost
                     + (udpHost == null ? "\nUDP: не задан" : "\nUDP: " + udpHost + ":" + udpPort)
-                    + "\nИнтервал повторов: " + interval + " с";
+                    + "\nИнтервал повторов: " + interval + " с"
+                    + (salt == null ? "" : "\nРежим стенда: " + durationMinutes + " мин, журнал " + ProbeService.EVIDENCE);
             showResult();
-            boolean repeat = intent.getBooleanExtra("repeat", false);
-            if (launchChecks && (repeat || intent.getBooleanExtra("autostart", false))) startChecks(repeat, false);
+            // The stand cannot pass extras into the work profile, so the private file can request a series on launch.
+            boolean repeat = intent.getBooleanExtra("repeat", false)
+                    || TargetValidation.bool(localTarget.getProperty("repeat", "false"));
+            if (launchChecks && !ProbeService.isRunning(salt) && (repeat || intent.getBooleanExtra("autostart", false))) startChecks(repeat, false);
         } catch (IllegalArgumentException e) {
             stopService(new Intent(this, ProbeService.class));
             lastResult = "Ошибка параметров: " + e.getMessage();
@@ -139,7 +145,9 @@ public final class MainActivity extends Activity {
         Intent service = new Intent(this, ProbeService.class)
                 .putExtra("url", target.toString()).putExtra("resolveHost", resolveHost)
                 .putExtra("udpHost", udpHost).putExtra("udpPort", udpPort)
-                .putExtra("interval", interval).putExtra("repeat", repeat).putExtra("ipOnly", ipOnly);
+                .putExtra("interval", interval).putExtra("repeat", repeat).putExtra("ipOnly", ipOnly)
+                .putExtra("durationMinutes", durationMinutes);
+        if (salt != null) service.putExtra("salt", salt).putExtra("leakUrl", leakUrl);
         try {
             startForegroundService(service);
             results.setText(repeat ? "Запуск повторных проверок…" : "Запуск проверки…");

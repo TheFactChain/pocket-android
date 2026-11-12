@@ -6,7 +6,8 @@ import java.util.concurrent.TimeUnit;
 
 /** One network worker; the independent deadline can abort blocked I/O. */
 final class ProbeRunner {
-    static final long MAX_RUN_MILLIS = 5 * 60 * 1000;
+    static final long DEFAULT_RUN_MILLIS = 5 * 60 * 1000;
+    static final long MAX_RUN_MILLIS = 30 * 60 * 1000;
     interface Check { String run(Session session); }
 
     static final class Session {
@@ -56,7 +57,7 @@ final class ProbeRunner {
     private String lastResult = "", status = "";
     private Runnable listener;
 
-    ProbeRunner() { this(MAX_RUN_MILLIS); }
+    ProbeRunner() { this(DEFAULT_RUN_MILLIS); }
 
     // Short deadlines are used only by the plain JVM self-check.
     ProbeRunner(long durationMillis) {
@@ -80,15 +81,21 @@ final class ProbeRunner {
     }
 
     synchronized void start(Check check, boolean repeat, int intervalSeconds) {
+        start(check, repeat, intervalSeconds, durationMillis);
+    }
+
+    synchronized void start(Check check, boolean repeat, int intervalSeconds, long runMillis) {
         TargetValidation.interval(intervalSeconds);
+        if (runMillis <= 0 || runMillis > MAX_RUN_MILLIS) throw new IllegalArgumentException("Недопустимая длительность.");
         cancelCurrent();
-        Session current = new Session(++nextId, durationMillis);
+        Session current = new Session(++nextId, runMillis);
         session = current;
         running = true;
-        status = repeat ? "Повторные проверки работают (не более 5 минут)." : "Проверка…";
+        long minutes = Math.max(1, runMillis / 60000);
+        status = repeat ? "Повторные проверки работают (не более " + minutes + " мин)." : "Проверка…";
         changed();
-        deadline = timer.schedule(() -> finish(current, "Лимит 5 минут: проверки остановлены."),
-                durationMillis, TimeUnit.MILLISECONDS);
+        deadline = timer.schedule(() -> finish(current, "Лимит " + minutes + " мин: проверки остановлены."),
+                runMillis, TimeUnit.MILLISECONDS);
         Runnable task = () -> {
             if (current.cancelled()) return;
             String result;

@@ -43,6 +43,21 @@ public final class TargetValidationSelfCheck {
         rejected(() -> TargetValidation.port(65536));
         rejected(() -> TargetValidation.interval(0));
         rejected(() -> TargetValidation.interval(61));
+        check(TargetValidation.minutes(30) == 30);
+        rejected(() -> TargetValidation.minutes(31));
+        check(TargetValidation.leakUrl("http://192.168.0.2:55887/pocket-test/r1").getPort() == 55887);
+        rejected(() -> TargetValidation.leakUrl("https://192.168.0.2/pocket-test/r1"));
+        rejected(() -> TargetValidation.leakUrl("http://192.168.0.2/other"));
+        rejected(() -> TargetValidation.leakUrl("http://192.168.0.2/pocket-test/r1?x=1"));
+        check(TargetValidation.salt("0123456789abcdef").length() == 16);
+        rejected(() -> TargetValidation.salt("SECRET0123456789"));
+        rejected(() -> TargetValidation.bool("yes"));
+        // Same salt and IP give the same short hash; the raw IP is not in it; non-IP bodies give nothing.
+        String hash = ProbeChecks.exitHash("0123456789abcdef", "203.0.113.7\n");
+        check(hash.matches("[0-9a-f]{16}") && hash.equals(ProbeChecks.exitHash("0123456789abcdef", "203.0.113.7")));
+        check(!hash.equals(ProbeChecks.exitHash("fedcba9876543210", "203.0.113.7")));
+        check(ProbeChecks.exitHash("0123456789abcdef", "<html>blocked</html>").isEmpty());
+        check(ProbeChecks.exitHash(null, "203.0.113.7").isEmpty());
         Path directory = Files.createTempDirectory(Paths.get(args[0]), "probe-target-");
         Path file = directory.resolve("test-target.properties");
         try {
@@ -53,6 +68,11 @@ public final class TargetValidationSelfCheck {
             Properties target = TargetValidation.readTarget(file.toFile());
             check(target.getProperty("url", "").endsWith("/pocket-test/uid1110372"));
             check(target.getProperty("udpPort", "").equals("55887"));
+            Files.write(file, ("repeat=true\ndurationMinutes=20\nleakUrl=http://192.168.0.2:55887/pocket-test/r1\n"
+                    + "salt=0123456789abcdef\n").getBytes(StandardCharsets.US_ASCII));
+            check(TargetValidation.readTarget(file.toFile()).getProperty("durationMinutes").equals("20"));
+            Files.write(file, "durationMinutes=45\n".getBytes(StandardCharsets.US_ASCII));
+            rejected(() -> TargetValidation.readTarget(file.toFile()));
             Files.write(file, "unknown=secret\n".getBytes(StandardCharsets.US_ASCII));
             rejected(() -> TargetValidation.readTarget(file.toFile()));
             Files.write(file, new byte[4097]);

@@ -107,6 +107,7 @@ public class MainActivity extends AppCompatActivity {
     /** Last state from the work profile VPN process; null until linked. */
     JSONObject state;
     JSONArray connectionList = new JSONArray();
+    JSONArray subscriptionList = new JSONArray();
     String linkProblem = "Связываем рабочий профиль…";
     int copiesCount = -1;
     net.typeblog.shelter.update.AppUpdater.Manifest updateOffer;
@@ -265,19 +266,21 @@ public class MainActivity extends AppCompatActivity {
         refreshing = true;
         worker.execute(() -> {
             JSONObject value = null;
-            JSONArray list = null;
+            JSONArray list = null, subs = null;
             try {
                 value = new JSONObject(mServiceWork.getPocketState());
                 list = new JSONArray(mServiceWork.listConnections());
+                subs = new JSONArray(mServiceWork.listSubscriptions());
             } catch (Exception ignored) { }
             final JSONObject fresh = value;
-            final JSONArray fetched = list;
+            final JSONArray fetched = list, fetchedSubs = subs;
             post(() -> {
                 refreshing = false;
                 if (fresh == null) setLinkProblem("Профиль недоступен. Включи рабочий профиль и открой Pocket снова.");
                 else {
                     state = fresh;
                     if (fetched != null) connectionList = fetched;
+                    if (fetchedSubs != null) subscriptionList = fetchedSubs;
                     linkProblem = null;
                     notifyState();
                 }

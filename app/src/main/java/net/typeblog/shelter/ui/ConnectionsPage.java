@@ -22,6 +22,8 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.connections.ConnectionProfile;
 import net.typeblog.shelter.connections.ProfileImporter;
+import net.typeblog.shelter.connections.Subscription;
+import net.typeblog.shelter.services.IShelterService;
 import net.typeblog.shelter.shop.ShopCatalog;
 
 import org.json.JSONArray;
@@ -61,8 +63,19 @@ final class ConnectionsPage extends Page {
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         group.addView(list, new LinearLayout.LayoutParams(-1, -2));
-        addRow(group, "Добавить подключение").setOnClickListener(v -> showAdd());
+        addRow(group, "Добавить подписку или подключение").setOnClickListener(v -> showAdd());
         stateText = caption(content, "");
+        subscriptionsHost = new LinearLayout(a);
+        subscriptionsHost.setOrientation(LinearLayout.VERTICAL);
+        // Subscriptions come first, as in Happ: that is where most servers live.
+        content.addView(subscriptionsHost, content.indexOfChild(group), new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    @Override void onShow() {
+        super.onShow();
+        // Opening the list is the moment Happ refreshes stale subscriptions; the work happens in the VPN process.
+        IShelterService work = a.mServiceWork;
+        if (work != null) a.worker.execute(() -> { try { work.refreshDueSubscriptions(); } catch (Exception ignored) { } });
     }
 
     private String proxyPrice() {
@@ -72,47 +85,300 @@ final class ConnectionsPage extends Page {
 
     @Override void onState() {
         view();
-        String json = a.connectionList.toString() + (a.state == null ? "" : a.state.optString("selectedId"));
+        String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId"));
         if (!json.equals(shownList)) { shownList = json; renderList(); }
         if (a.state == null) stateText.setText(a.linkProblem);
         else {
             String type = a.state.optString("selectedType");
             stateText.setText(type.isEmpty() ? "Пока подключение не выбрано, интернет копий закрыт."
-                    : type.equals("Hysteria2") ? "TCP и UDP. Интернет: только IPv4." : "Только TCP. Интернет: только IPv4.");
+                    : type.equals("Hysteria2") || type.equals("VLESS") ? "TCP и UDP. Интернет: только IPv4." : "Только TCP. Интернет: только IPv4.");
         }
     }
 
     private void renderList() {
         list.removeAllViews();
+        subscriptionsHost.removeAllViews();
         String selected = a.state == null ? "" : a.state.optString("selectedId");
         JSONArray items = a.connectionList;
+        java.util.Set<String> known = new java.util.HashSet<>();
+        for (int i = 0; i < a.subscriptionList.length(); i++) {
+            JSONObject sub = a.subscriptionList.optJSONObject(i);
+            if (sub != null) known.add(sub.optString("id"));
+        }
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
-            if (item == null) continue;
+            if (item == null || known.contains(item.optString("subscription"))) continue;
             String id = item.optString("id"), name = item.optString("name"), type = item.optString("type");
             boolean isSelected = id.equals(selected);
             boolean editable = ConnectionProfile.UI_TYPES.contains(type);
-            RowView row = new RowView(a);
-            if (isSelected) row.setIcon(R.drawable.ic_check, a.color(R.color.accent), 0xFFFFFFFF);
-            else row.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
-            row.setTitle(name).setTitleBold(isSelected)
-                    .setCaption(item.optString("typeLabel", type) + ", " + item.optString("server")
-                            + (editable ? "" : ", не поддерживается"));
+            RowView row = serverRow(item, isSelected);
+            row.setCaption(item.optString("details", type) + ", " + item.optString("server"));
             row.setEnd(textAction(editable ? "Изменить" : "Удалить", v -> {
                 if (editable) edit(id); else confirmDelete(id, name, isSelected);
             }));
-            row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
-            row.setOnClickListener(v -> {
-                if (isSelected || !editable) return;
-                a.toast("Переключаем на «" + name + "»…", true);
-                a.remote(() -> { a.mServiceWork.activateConnection(id); return null; },
-                        x -> { a.toast("Готово: «" + name + "» используется."); a.refreshState(); },
-                        "Не удалось выбрать подключение.");
-            });
             // Each connection brings its own top line; «Добавить» adds the line under the last one.
             separator(list);
             list.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
+        for (int i = 0; i < a.subscriptionList.length(); i++) {
+            JSONObject sub = a.subscriptionList.optJSONObject(i);
+            if (sub != null) renderSubscription(sub, items, selected);
+        }
+    }
+
+    /** A server line: tap to use it. The caller sets the caption and the end view. */
+    private RowView serverRow(JSONObject item, boolean isSelected) {
+        String id = item.optString("id"), name = item.optString("name");
+        RowView row = new RowView(a);
+        if (isSelected) row.setIcon(R.drawable.ic_check, a.color(R.color.accent), 0xFFFFFFFF);
+        else row.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
+        row.setTitle(name).setTitleBold(isSelected);
+        row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
+        row.setOnClickListener(v -> {
+            if (isSelected) return;
+            a.toast("Переключаем на «" + name + "»…", true);
+            a.remote(() -> { a.mServiceWork.activateConnection(id); return null; },
+                    x -> { a.toast("Готово: «" + name + "» используется."); a.refreshState(); },
+                    "Не удалось выбрать подключение.");
+        });
+        return row;
+    }
+
+    // ---- Subscriptions (as Happ shows them: provider, traffic, expiry, servers with ping) ----
+
+    private LinearLayout subscriptionsHost;
+    /** Last ping per server id in milliseconds; see ServerPing for the negative codes. */
+    private final java.util.Map<String, Long> pings = new java.util.HashMap<>();
+    private final java.util.Set<String> pinging = new java.util.HashSet<>(), pinged = new java.util.HashSet<>();
+    private final java.util.Set<String> refreshing = new java.util.HashSet<>();
+
+    private void renderSubscription(JSONObject sub, JSONArray items, String selected) {
+        String subId = sub.optString("id"), title = sub.optString("title");
+        LinearLayout card = new LinearLayout(a);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_group);
+        card.setClipToOutline(true);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.bottomMargin = a.dp(22);
+        subscriptionsHost.addView(card, cardParams);
+
+        LinearLayout header = new LinearLayout(a);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(a.dp(16), a.dp(14), a.dp(12), a.dp(10));
+        card.addView(header);
+        LinearLayout top = new LinearLayout(a);
+        top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        header.addView(top);
+        TextView name = new TextView(a);
+        name.setTextAppearance(R.style.RowText);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setText(title);
+        top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        boolean busy = refreshing.contains(subId);
+        top.addView(textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title)));
+        top.addView(textAction(pinging.contains(subId) ? "Пинг…" : "Пинг", v -> ping(subId)));
+        top.addView(textAction("Ещё", v -> subscriptionMenu(sub)));
+
+        long updated = sub.optLong("updated");
+        String meta = (updated > 0 ? "Обновлено " + new java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.ROOT).format(new java.util.Date(updated)) : "Ещё не обновлялась")
+                + " · авто каждые " + sub.optInt("intervalHours", 12) + " ч";
+        TextView metaText = small(header, meta, R.color.muted);
+        metaText.setPadding(0, a.dp(2), 0, 0);
+        if (!sub.optString("error").isEmpty()) small(header, "Не обновилась: " + sub.optString("error") + " Работают прежние серверы.", R.color.danger);
+
+        // Traffic and expiry, the two numbers people check first.
+        long used = sub.optLong("upload") + sub.optLong("download"), total = sub.optLong("total"), expire = sub.optLong("expire");
+        if (used > 0 || total > 0 || expire > 0) {
+            LinearLayout usage = new LinearLayout(a);
+            usage.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            usage.setPadding(0, a.dp(8), 0, 0);
+            header.addView(usage);
+            TextView traffic = new TextView(a);
+            traffic.setTextAppearance(R.style.Caption);
+            traffic.setTextColor(a.color(R.color.ink));
+            traffic.setText("Трафик: " + bytes(used) + " / " + (total > 0 ? bytes(total) : "∞"));
+            usage.addView(traffic, new LinearLayout.LayoutParams(0, -2, 1));
+            if (expire > 0) {
+                long left = expire * 1000 - System.currentTimeMillis();
+                TextView until = new TextView(a);
+                until.setTextAppearance(R.style.Caption);
+                String date = new java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).format(new java.util.Date(expire * 1000));
+                until.setText(left <= 0 ? "Истекла " + date : "Истекает " + date);
+                until.setTextColor(a.color(left <= 0 ? R.color.danger : left < 3 * 86_400_000L ? R.color.orange_ink : R.color.ink));
+                usage.addView(until);
+            }
+            if (total > 0) {
+                android.widget.ProgressBar bar = new android.widget.ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
+                bar.setMax(1000);
+                bar.setProgress((int) Math.min(1000, used * 1000 / total));
+                bar.setProgressTintList(ColorStateList.valueOf(a.color(used >= total ? R.color.danger : R.color.green)));
+                bar.setContentDescription("Использовано " + bytes(used) + " из " + bytes(total));
+                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, a.dp(6));
+                barParams.topMargin = a.dp(6);
+                header.addView(bar, barParams);
+            }
+        }
+        if (!sub.optString("announce").isEmpty()) {
+            TextView announce = small(header, sub.optString("announce"), R.color.ink);
+            announce.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
+            announce.setBackgroundResource(R.drawable.bg_capsule);
+            announce.setBackgroundTintList(ColorStateList.valueOf(a.color(R.color.blue_soft)));
+            ((LinearLayout.LayoutParams) announce.getLayoutParams()).topMargin = a.dp(8);
+        }
+
+        int count = 0;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null || !subId.equals(item.optString("subscription"))) continue;
+            count++;
+            boolean isSelected = item.optString("id").equals(selected);
+            RowView row = serverRow(item, isSelected);
+            row.setCaption(item.optString("details"));
+            Long ms = pings.get(item.optString("id"));
+            if (ms != null) {
+                boolean good = ms > 0 && ms <= 150, ok = ms > 150 && ms <= 400;
+                row.setPill(ms > 0 ? ms + " мс" : ms == -2 ? "скрыт" : "нет ответа",
+                        a.color(good ? R.color.green_soft : ok ? R.color.orange_soft : ms > 0 ? R.color.danger_soft : R.color.grey_soft),
+                        a.color(good ? R.color.green_ink : ok ? R.color.orange_ink : ms > 0 ? R.color.danger : R.color.muted));
+            }
+            separator(card);
+            card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+        if (count == 0) {
+            separator(card);
+            TextView empty = small(card, "В подписке пока нет серверов, которые Pocket умеет подключать.", R.color.muted);
+            empty.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
+        } else if (!pinged.contains(subId)) ping(subId);
+    }
+
+    private TextView small(LinearLayout parent, String text, int color) {
+        TextView view = new TextView(a);
+        view.setTextAppearance(R.style.Caption);
+        view.setTextColor(a.color(color));
+        view.setText(text);
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        return view;
+    }
+
+    static String bytes(long value) {
+        double gb = value / 1073741824.0;
+        if (gb >= 10) return Math.round(gb) + " ГБ";
+        if (gb >= 0.1) return String.format(java.util.Locale.ROOT, "%.1f ГБ", gb).replace('.', ',');
+        return Math.round(value / 1048576.0) + " МБ";
+    }
+
+    private void ping(String subId) {
+        if (pinging.contains(subId) || a.mServiceWork == null) return;
+        pinging.add(subId);
+        pinged.add(subId);
+        renderList();
+        IShelterService work = a.mServiceWork;
+        a.worker.execute(() -> {
+            JSONObject result = null;
+            try { result = new JSONObject(work.pingConnections(subId)); } catch (Exception ignored) { }
+            JSONObject values = result;
+            a.post(() -> {
+                pinging.remove(subId);
+                if (values == null) a.toast("Пинг не выполнен. Открой Pocket снова.");
+                else for (java.util.Iterator<String> keys = values.keys(); keys.hasNext();) {
+                    String key = keys.next();
+                    pings.put(key, values.optLong(key, -1));
+                }
+                renderList();
+            });
+        });
+    }
+
+    private void refreshSubscription(String subId, String title) {
+        if (!refreshing.add(subId)) return;
+        renderList();
+        a.toast("Обновляем «" + title + "»…", true);
+        IShelterService work = a.mServiceWork;
+        if (work == null) { refreshing.remove(subId); a.toast(a.linkProblem == null ? "Рабочий профиль недоступен." : a.linkProblem); return; }
+        a.worker.execute(() -> {
+            String message;
+            try {
+                JSONObject result = new JSONObject(work.refreshSubscription(subId));
+                message = "«" + result.optString("title") + "» обновлена: серверов " + result.optInt("count") + ".";
+                if (result.optBoolean("selectedGone")) message += " Выбранного сервера больше нет в подписке, он оставлен до выбора другого.";
+            } catch (IllegalArgumentException e) {
+                message = e.getMessage() + " Работают прежние серверы.";
+            } catch (Exception e) {
+                message = "Подписка не обновилась. Работают прежние серверы.";
+            }
+            String text = message;
+            a.post(() -> {
+                refreshing.remove(subId);
+                pinged.remove(subId);
+                a.toast(text);
+                a.refreshState();
+                renderList();
+            });
+        });
+    }
+
+    private void subscriptionMenu(JSONObject sub) {
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        java.util.List<Runnable> actions = new java.util.ArrayList<>();
+        String support = sub.optString("supportUrl"), web = sub.optString("webUrl"), title = sub.optString("title");
+        if (!support.isEmpty()) { labels.add("Поддержка провайдера"); actions.add(() -> a.openUrl(support)); }
+        if (!web.isEmpty()) { labels.add("Сайт провайдера"); actions.add(() -> a.openUrl(web)); }
+        labels.add("Удалить подписку");
+        actions.add(() -> confirmDeleteSubscription(sub.optString("id"), title));
+        new AlertDialog.Builder(a).setTitle(title)
+                .setItems(labels.toArray(new String[0]), (d, which) -> actions.get(which).run())
+                .setNegativeButton("Закрыть", null).show();
+    }
+
+    private void confirmDeleteSubscription(String subId, String title) {
+        boolean active = false;
+        String selected = a.state == null ? "" : a.state.optString("selectedId");
+        for (int i = 0; i < a.connectionList.length(); i++) {
+            JSONObject item = a.connectionList.optJSONObject(i);
+            if (item != null && item.optString("id").equals(selected) && subId.equals(item.optString("subscription"))) active = true;
+        }
+        new AlertDialog.Builder(a)
+                .setTitle("Удалить подписку «" + title + "»?")
+                .setMessage(active ? "Сейчас используется сервер из этой подписки. Пока не выбрано другое подключение, интернет копий будет закрыт."
+                        : "Подписка и её серверы будут удалены с телефона.")
+                .setPositiveButton("Удалить", (d, w) -> a.remote(() -> { a.mServiceWork.deleteSubscription(subId); return null; },
+                        x -> { a.toast("Подписка «" + title + "» удалена."); a.refreshState(); },
+                        "Не удалось удалить подписку."))
+                .setNegativeButton("Отмена", null)
+                .show();
+    }
+
+    /** One paste: download the subscription, keep the current connection, or use the first server if none is chosen. */
+    private void addSubscription(String url, TextView errorView) {
+        String current = a.state == null ? "?" : a.state.optString("selectedId");
+        String currentName = a.state == null ? "" : a.state.optString("selectedName");
+        if (errorView != null) errorView.setVisibility(View.GONE);
+        a.toast("Загружаем подписку…", true);
+        IShelterService work = a.mServiceWork;
+        if (work == null) { showError(errorView, a.linkProblem == null ? "Рабочий профиль недоступен." : a.linkProblem); return; }
+        a.worker.execute(() -> {
+            try {
+                JSONObject result = new JSONObject(work.addSubscription(url));
+                boolean use = current.isEmpty() && !result.optString("firstId").isEmpty();
+                if (use) work.activateConnection(result.optString("firstId"));
+                int count = result.optInt("count"), skipped = result.optInt("skipped");
+                String message = "Подписка «" + result.optString("title") + "»: серверов " + count + "."
+                        + (skipped > 0 ? " Пропущено " + skipped + ": " + result.optString("warning") : "")
+                        + (use ? " Подключаемся к первому." : current.isEmpty() ? "" : " Текущее подключение"
+                        + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено; выбери сервер в списке.");
+                a.post(() -> {
+                    if (sheet != null) sheet.dismiss();
+                    a.hideToast();
+                    a.openConnections();
+                    a.toast(message);
+                    a.refreshState();
+                });
+            } catch (IllegalArgumentException e) {
+                a.post(() -> { a.hideToast(); showError(errorView, e.getMessage()); });
+            } catch (Exception e) {
+                a.post(() -> { a.hideToast(); showError(errorView, "Подписка не загрузилась. Открой Pocket снова."); });
+            }
+        });
     }
 
     // ---- Sheets ----
@@ -143,7 +409,7 @@ final class ConnectionsPage extends Page {
         if (clipboard != null && clipboard.hasPrimaryClip() && clipboard.getPrimaryClip().getItemCount() > 0) {
             CharSequence clip = clipboard.getPrimaryClip().getItemAt(0).coerceToText(a);
             String text = clip == null ? "" : clip.toString().trim();
-            if (text.matches("(?i)(hy2|hysteria2|socks5|http|https)://\\S+") && text.length() <= 8192) input.setText(text);
+            if (text.matches("(?i)(hy2|hysteria2|vless|socks5|http|https|happ)://\\S+") && text.length() <= 8192) input.setText(text);
         }
         body.findViewById(R.id.add_button).setOnClickListener(v -> importText(input.getText().toString(), addError));
         input.setOnEditorActionListener((v, id, e) -> { importText(input.getText().toString(), addError); return true; });
@@ -165,6 +431,8 @@ final class ConnectionsPage extends Page {
 
     /** Link, list of links, a Pocket Windows file or a sing-box config: saved; the first one is used only if none is selected yet. */
     void importText(String text, TextView errorView) {
+        String subscription = Subscription.subscriptionUrl(text);
+        if (subscription != null) { addSubscription(subscription, errorView); return; }
         // Unknown state counts as "something may be selected", so nothing is swapped blindly.
         String current = a.state == null ? "?" : a.state.optString("selectedId");
         String currentName = a.state == null ? "" : a.state.optString("selectedName");

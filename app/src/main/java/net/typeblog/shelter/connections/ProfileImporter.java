@@ -48,22 +48,29 @@ public final class ProfileImporter {
         }
     }
 
-    /** What the interface accepts: the four Pocket Windows types; VLESS records become warnings. */
+    /** What the interface accepts; a Pocket Windows file without passwords becomes a draft for the editor. */
     public static Result parseForInterface(String input) {
-        Result result;
         try {
-            result = parse(input);
+            return parse(input);
         } catch (NeedsCredentials e) {
             return new Result(Collections.<ConnectionProfile>emptyList(), Collections.<String>emptyList(), e.draft);
         }
-        List<ConnectionProfile> profiles = new ArrayList<>();
-        List<String> warnings = new ArrayList<>(result.warnings);
-        for (ConnectionProfile profile : result.profiles) {
-            if (ConnectionProfile.UI_TYPES.contains(profile.type)) profiles.add(profile);
-            else warnings.add("«" + profile.name + "» пропущено: VLESS в этой версии не поддерживается.");
+    }
+
+    /** A subscription body is often one base64 block of links; anything else is returned unchanged. */
+    public static String decodeBase64List(String text) {
+        String compact = text.replaceAll("\\s+", "").replace("=", "");
+        if (compact.isEmpty() || text.contains("://") || !compact.matches("[A-Za-z0-9+/_-]+")) return text;
+        try {
+            boolean url = compact.indexOf('-') >= 0 || compact.indexOf('_') >= 0;
+            // Java's decoder does not require the padding that subscription panels often drop.
+            byte[] bytes = (url ? java.util.Base64.getUrlDecoder() : java.util.Base64.getDecoder()).decode(compact);
+            String decoded = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes)).toString();
+            return decoded.contains("://") ? decoded : text;
+        } catch (IllegalArgumentException | CharacterCodingException e) {
+            return text;
         }
-        if (profiles.isEmpty()) throw invalid(warnings.isEmpty() ? "Не найдено пригодных подключений." : warnings.get(0));
-        return new Result(profiles, warnings, null);
     }
 
     static final class NeedsCredentials extends IllegalArgumentException {
@@ -86,6 +93,7 @@ public final class ProfileImporter {
         }
         String text = input.trim();
         if (text.startsWith("\uFEFF")) text = text.substring(1).trim();
+        text = decodeBase64List(text).trim();
         if (text.isEmpty()) throw invalid("Нет данных для импорта.");
         List<ConnectionProfile> profiles = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
@@ -122,8 +130,15 @@ public final class ProfileImporter {
         try {
             JSONTokener tokener = new JSONTokener(text);
             Object value = tokener.nextValue();
-            if (!(value instanceof JSONObject) || tokener.nextClean() != 0) throw invalid("Ожидается один полный JSON-объект.");
+            if (tokener.nextClean() != 0) throw invalid("Ожидается один полный JSON-объект.");
+            // Happ «JSON» subscriptions: a list of full Xray configs, one server each.
+            if (value instanceof JSONArray) { XrayImport.parseList((JSONArray) value, profiles, warnings); return; }
+            if (!(value instanceof JSONObject)) throw invalid("Ожидается один полный JSON-объект.");
             JSONObject json = (JSONObject) value;
+            if (XrayImport.isXrayConfig(json)) {
+                XrayImport.parseList(new JSONArray().put(json), profiles, warnings);
+                return;
+            }
             if (json.has("outbounds")) {
                 Object records = json.opt("outbounds");
                 if (!(records instanceof JSONArray)) throw invalid("Поле outbounds должно содержать список подключений.");
@@ -154,6 +169,7 @@ public final class ProfileImporter {
         if (json.has("port")) {
             // Imported records must never replace an existing, possibly selected connection.
             json.remove("id");
+            json.remove("subscription");
             return ConnectionProfile.fromJson(json);
         }
         String type = string(json, "type", "");
@@ -164,11 +180,6 @@ public final class ProfileImporter {
             requireKeys(json, "type", "tag", "server", "server_port", "password", "tls", "obfs");
         } else {
             requireKeys(json, "type", "tag", "server", "server_port", "uuid", "flow", "tls", "transport", "packet_encoding");
-            if (json.has("transport")) {
-                JSONObject transport = object(json, "transport");
-                requireKeys(transport, "type");
-                if (!string(transport, "type", "tcp").equals("tcp")) throw invalid("Поддерживается только транспорт TCP для VLESS.");
-            }
             if (!string(json, "packet_encoding", "xudp").equals("xudp")) {
                 throw invalid("Поддерживается только кодирование UDP XUDP для VLESS.");
             }
@@ -196,12 +207,30 @@ public final class ProfileImporter {
                     flat.put("obfsPassword", password);
                 }
             } else {
-                JSONObject reality = object(tls, "reality");
-                requireKeys(reality, "enabled", "public_key", "short_id");
-                requireTrue(reality, "enabled");
-                flat.put("uuid", string(json, "uuid", "")).put("flow", string(json, "flow", ""))
-                        .put("realityPublicKey", string(reality, "public_key", ""))
-                        .put("shortId", string(reality, "short_id", ""));
+                flat.put("uuid", string(json, "uuid", "")).put("flow", string(json, "flow", ""));
+                if (tls.has("reality")) {
+                    JSONObject reality = object(tls, "reality");
+                    requireKeys(reality, "enabled", "public_key", "short_id");
+                    requireTrue(reality, "enabled");
+                    flat.put("security", "reality").put("realityPublicKey", string(reality, "public_key", ""))
+                            .put("shortId", string(reality, "short_id", ""));
+                } else flat.put("security", "tls");
+                if (json.has("transport")) {
+                    JSONObject transport = object(json, "transport");
+                    String kind = string(transport, "type", "");
+                    if (kind.equals("grpc")) {
+                        requireKeys(transport, "type", "service_name");
+                        flat.put("transport", "grpc").put("path", string(transport, "service_name", ""));
+                    } else if (kind.equals("ws")) {
+                        requireKeys(transport, "type", "path", "headers");
+                        flat.put("transport", "ws").put("path", string(transport, "path", ""));
+                        if (transport.has("headers")) {
+                            JSONObject headers = object(transport, "headers");
+                            requireKeys(headers, "Host");
+                            flat.put("host", string(headers, "Host", ""));
+                        }
+                    } else throw invalid("Для VLESS поддерживаются транспорты TCP, gRPC и WebSocket.");
+                }
                 if (tls.has("utls")) {
                     JSONObject utls = object(tls, "utls");
                     requireKeys(utls, "enabled", "fingerprint");
@@ -261,7 +290,8 @@ public final class ProfileImporter {
 
     private static ConnectionProfile parseUri(String text) {
         try {
-            URI uri = new URI(text);
+            // Panels often leave spaces unescaped in the server name after '#'.
+            URI uri = new URI(text.replace(" ", "%20"));
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
             boolean hy2 = scheme.equals("hy2") || scheme.equals("hysteria2");
             boolean proxy = scheme.equals("socks5") || scheme.equals("http") || scheme.equals("https");
@@ -299,14 +329,19 @@ public final class ProfileImporter {
             }
             if (!port.matches("[0-9]{1,5}")) throw invalid("Некорректный порт подключения.");
             Map<String, String> query = query(uri.getRawQuery());
-            List<String> allowed = hy2 ? Arrays.asList("sni", "insecure", "obfs", "obfs-password")
-                    : Arrays.asList("security", "type", "encryption", "sni", "pbk", "sid", "fp", "flow", "insecure");
+            List<String> allowed = hy2 ? Arrays.asList("sni", "insecure", "obfs", "obfs-password", "alpn")
+                    : Arrays.asList("security", "type", "encryption", "sni", "pbk", "sid", "fp", "flow", "insecure",
+                    "allowInsecure", "alpn", "headerType", "serviceName", "mode", "authority", "path", "host", "spx");
             for (String key : query.keySet()) {
-                if (key.equals("spx")) throw invalid("Параметр spx от Xray не поддерживается.");
                 if (!allowed.contains(key)) throw invalid("Ссылка содержит неподдерживаемые параметры подключения.");
             }
-            String insecure = query.getOrDefault("insecure", "0");
-            if (!insecure.equals("0") && !insecure.equals("false")) throw invalid("Отключение проверки TLS запрещено.");
+            // spx is only Xray's crawler path for REALITY probes; the connection is the same without it.
+            if (!query.getOrDefault("spx", "/").equals("/")) throw invalid("Параметр spx от Xray не поддерживается.");
+            // ALPN is negotiated by the core itself: h3 for Hysteria2, h2/http/1.1 for TLS.
+            for (String key : new String[] {"insecure", "allowInsecure"}) {
+                String insecure = query.getOrDefault(key, "0");
+                if (!insecure.equals("0") && !insecure.equals("false")) throw invalid("Отключение проверки TLS запрещено.");
+            }
             JSONObject flat = new JSONObject().put("type", hy2 ? "hysteria2" : "vless")
                     .put("server", server).put("port", Integer.parseInt(port))
                     .put("serverName", query.getOrDefault("sni", ""));
@@ -319,13 +354,24 @@ public final class ProfileImporter {
                 if (obfs.isEmpty() != obfsPassword.isEmpty()) throw invalid("Нужно указать salamander и его пароль вместе.");
                 flat.put("obfsPassword", obfsPassword);
             } else {
-                if (!query.getOrDefault("security", "").equals("reality")) throw invalid("Для VLESS поддерживается только REALITY.");
-                if (!query.getOrDefault("type", "tcp").equals("tcp")) throw invalid("Поддерживается только транспорт TCP для VLESS.");
+                String security = query.getOrDefault("security", "");
+                if (!security.equals("reality") && !security.equals("tls")) throw invalid("Для VLESS поддерживаются REALITY и TLS.");
+                String transport = query.getOrDefault("type", "tcp");
+                if (transport.equals("raw")) transport = "tcp";
+                if (!transport.equals("tcp") && !transport.equals("grpc") && !transport.equals("ws")) {
+                    throw invalid("Транспорт VLESS «" + transport + "» не поддерживается.");
+                }
                 if (!query.getOrDefault("encryption", "none").equals("none")) throw invalid("Поддерживается только encryption=none для VLESS.");
-                flat.put("uuid", credential).put("realityPublicKey", query.getOrDefault("pbk", ""))
+                if (!query.getOrDefault("headerType", "none").equals("none")) throw invalid("Маскировка заголовков TCP не поддерживается.");
+                if (!query.getOrDefault("mode", "gun").equals("gun")) throw invalid("Режим gRPC multi не поддерживается.");
+                if (!query.getOrDefault("authority", "").isEmpty()) throw invalid("Параметр authority для gRPC не поддерживается.");
+                flat.put("uuid", credential).put("security", security).put("transport", transport)
+                        .put("realityPublicKey", query.getOrDefault("pbk", ""))
                         .put("shortId", query.getOrDefault("sid", ""))
                         .put("fingerprint", query.getOrDefault("fp", ""))
                         .put("flow", query.getOrDefault("flow", ""));
+                if (transport.equals("grpc")) flat.put("path", query.getOrDefault("serviceName", ""));
+                if (transport.equals("ws")) flat.put("path", query.getOrDefault("path", "")).put("host", query.getOrDefault("host", ""));
             }
             return ConnectionProfile.fromJson(flat);
         } catch (URISyntaxException | JSONException e) {

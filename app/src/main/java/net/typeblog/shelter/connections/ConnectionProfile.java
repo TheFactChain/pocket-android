@@ -20,12 +20,19 @@ public final class ConnectionProfile {
     public final int port;
     public final String password, uuid, serverName, realityPublicKey, shortId, fingerprint, flow,
             obfsPassword, username;
+    /** VLESS only: «reality» or «tls»; «tcp», «grpc» or «ws»; gRPC service name or WebSocket path; WebSocket Host. */
+    public final String security, transport, path, wsHost;
+    /** Id of the subscription this server came from, or empty for a connection added by hand. */
+    public final String subscription;
     /** Types offered in the interface, as in Pocket Windows; VLESS stays readable by code only. */
     public static final java.util.List<String> UI_TYPES = Arrays.asList("hysteria2", "socks5", "http", "https");
 
     private ConnectionProfile(JSONObject json) {
         requireKeys(json, "id", "name", "type", "server", "port", "password", "uuid",
-                "serverName", "realityPublicKey", "shortId", "fingerprint", "flow", "obfsPassword", "username");
+                "serverName", "realityPublicKey", "shortId", "fingerprint", "flow", "obfsPassword", "username",
+                "security", "transport", "path", "host", "subscription");
+        subscription = string(json, "subscription", "");
+        if (subscription.length() > 128) throw invalid("Некорректная подписка подключения.");
         id =string(json, "id", UUID.randomUUID().toString());
         if (id.isEmpty() || id.length() > 128) throw invalid("Некорректный идентификатор подключения.");
         type = string(json, "type", "");
@@ -50,12 +57,31 @@ public final class ConnectionProfile {
         obfsPassword = string(json, "obfsPassword", "");
         username = string(json, "username", "");
         String sni = string(json, "serverName", "");
+        String sec = string(json, "security", ""), net = string(json, "transport", "");
+        String route = string(json, "path", ""), wsHostText = string(json, "host", "");
         if (!type.equals("vless") && (!uuid.isEmpty() || !realityPublicKey.isEmpty() || !shortId.isEmpty()
-                || !flow.isEmpty() || !string(json, "fingerprint", "").isEmpty())) {
+                || !flow.isEmpty() || !string(json, "fingerprint", "").isEmpty() || !sec.isEmpty() || !net.isEmpty()
+                || !route.isEmpty() || !wsHostText.isEmpty())) {
             throw invalid("Параметры VLESS нельзя применять к этому типу.");
         }
         if (!type.equals("hysteria2") && !obfsPassword.isEmpty()) {
             throw invalid("Маскировка Salamander есть только у Hysteria2.");
+        }
+        if (!type.equals("vless")) { security = ""; transport = ""; path = ""; wsHost = ""; }
+        else {
+            // Stored before TLS and transports existed: REALITY over TCP.
+            security = sec.isEmpty() ? "reality" : sec;
+            transport = net.isEmpty() ? "tcp" : net;
+            if (!security.equals("reality") && !security.equals("tls")) throw invalid("Для VLESS поддерживаются REALITY и TLS.");
+            if (!transport.equals("tcp") && !transport.equals("grpc") && !transport.equals("ws")) {
+                throw invalid("Для VLESS поддерживаются транспорты TCP, gRPC и WebSocket.");
+            }
+            if (transport.equals("tcp") && !route.isEmpty()) throw invalid("Путь есть только у gRPC и WebSocket.");
+            if (transport.equals("ws") && !route.isEmpty() && !route.startsWith("/")) throw invalid("Путь WebSocket должен начинаться с /.");
+            if (route.length() > 512) throw invalid("Слишком длинный путь подключения.");
+            path = route;
+            if (!transport.equals("ws") && !wsHostText.isEmpty()) throw invalid("Host есть только у WebSocket.");
+            wsHost = wsHostText.isEmpty() ? "" : host(wsHostText);
         }
         if (isProxy()) {
             if (username.isEmpty() != password.isEmpty()) throw invalid("Укажи и логин, и пароль, или ни одного.");
@@ -73,11 +99,14 @@ public final class ConnectionProfile {
             if (!uuid.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")) {
                 throw invalid("Для VLESS требуется корректный UUID.");
             }
-            if (!validPublicKey(realityPublicKey)) throw invalid("Некорректный публичный ключ REALITY.");
-            if (!shortId.matches("(?:[0-9a-f]{2}){0,8}")) throw invalid("Некорректный short ID REALITY.");
+            if (security.equals("reality")) {
+                if (!validPublicKey(realityPublicKey)) throw invalid("Некорректный публичный ключ REALITY.");
+                if (!shortId.matches("(?:[0-9a-f]{2}){0,8}")) throw invalid("Некорректный short ID REALITY.");
+                if (sni.isEmpty()) throw invalid("Для REALITY требуется имя сервера TLS (SNI).");
+            } else if (!realityPublicKey.isEmpty() || !shortId.isEmpty()) throw invalid("Параметры REALITY нельзя применять к TLS.");
             if (!flow.isEmpty() && !flow.equals("xtls-rprx-vision")) throw invalid("Неподдерживаемый flow VLESS.");
-            if (sni.isEmpty()) throw invalid("Для REALITY требуется имя сервера TLS (SNI).");
-            serverName = host(sni);
+            if (!flow.isEmpty() && !transport.equals("tcp")) throw invalid("Flow VLESS работает только поверх TCP.");
+            serverName = host(sni.isEmpty() ? server : sni);
             String fp = string(json, "fingerprint", "");
             fingerprint = fp.isEmpty() ? "chrome" : fp;
             if (!Arrays.asList("chrome", "firefox", "edge", "safari", "360", "qq", "ios",
@@ -98,7 +127,9 @@ public final class ConnectionProfile {
                     .put("server", server).put("port", port).put("password", password)
                     .put("uuid", uuid).put("serverName", serverName).put("realityPublicKey", realityPublicKey)
                     .put("shortId", shortId).put("fingerprint", fingerprint).put("flow", flow)
-                    .put("obfsPassword", obfsPassword).put("username", username);
+                    .put("obfsPassword", obfsPassword).put("username", username)
+                    .put("security", security).put("transport", transport).put("path", path).put("host", wsHost)
+                    .put("subscription", subscription);
         } catch (JSONException e) {
             throw invalid("Не удалось сериализовать подключение.");
         }
@@ -151,8 +182,17 @@ public final class ConnectionProfile {
                 outbound.put("uuid", uuid).put("packet_encoding", "xudp");
                 if (!flow.isEmpty()) outbound.put("flow", flow);
                 tls.put("utls", new JSONObject().put("enabled", true).put("fingerprint", fingerprint));
-                tls.put("reality", new JSONObject().put("enabled", true)
-                        .put("public_key", realityPublicKey).put("short_id", shortId));
+                if (security.equals("reality")) {
+                    tls.put("reality", new JSONObject().put("enabled", true)
+                            .put("public_key", realityPublicKey).put("short_id", shortId));
+                } else tls.put("insecure", false);
+                if (transport.equals("grpc")) {
+                    outbound.put("transport", new JSONObject().put("type", "grpc").put("service_name", path));
+                } else if (transport.equals("ws")) {
+                    JSONObject ws = new JSONObject().put("type", "ws").put("path", path.isEmpty() ? "/" : path);
+                    if (!wsHost.isEmpty()) ws.put("headers", new JSONObject().put("Host", wsHost));
+                    outbound.put("transport", ws);
+                }
             }
             return outbound;
         } catch (JSONException e) {
@@ -178,6 +218,19 @@ public final class ConnectionProfile {
             case "https": return "HTTPS";
             default: return "VLESS";
         }
+    }
+
+    /** «VLESS · gRPC · TLS», as server rows show it. */
+    public String details() {
+        if (!type.equals("vless")) return typeLabel();
+        String net = transport.equals("grpc") ? "gRPC" : transport.equals("ws") ? "WebSocket" : "TCP";
+        return "VLESS · " + net + " · " + (security.equals("reality") ? "REALITY" : "TLS");
+    }
+
+    /** Same server and settings, kept under another id and subscription. */
+    public ConnectionProfile withIdentity(String newId, String newSubscription) {
+        try { return fromJson(toJson().put("id", newId).put("subscription", newSubscription)); }
+        catch (JSONException e) { throw invalid("Не удалось сохранить подключение."); }
     }
 
     static String string(JSONObject json, String key, String fallback) {

@@ -14,7 +14,9 @@ import android.os.UserManager;
 import androidx.core.content.ContextCompat;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.connections.ConnectionProfile;
+import net.typeblog.shelter.connections.ProfileImporter;
 import net.typeblog.shelter.connections.ProfileStore;
+import net.typeblog.shelter.connections.Subscription;
 import net.typeblog.shelter.services.IPocketVpnService;
 import net.typeblog.shelter.ui.OpenPocketActivity;
 import io.nekohasekai.libbox.*;
@@ -37,6 +39,8 @@ public class PocketVpnService extends VpnService {
     private static final String CHANNEL = "pocket-network";
     private static final int NOTIFICATION = 901;
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
+    /** Subscription downloads: slow network work never blocks the core's thread. */
+    private final ScheduledExecutorService network = Executors.newSingleThreadScheduledExecutor();
     private volatile String snapshot = "{\"policyState\":\"UNCONFIRMED\",\"connectionState\":\"NO_SELECTION\"}";
     private volatile boolean closed;
     private ProfileStore store;
@@ -97,7 +101,85 @@ public class PocketVpnService extends VpnService {
                 return null;
             });
         }
+        @Override public String listSubscriptions() { return call(() -> requireStore().subscriptionSummaries()); }
+        @Override public String addSubscription(String text) {
+            String url = Subscription.subscriptionUrl(text);
+            if (url == null) throw new IllegalArgumentException("Нужна ссылка подписки https://…");
+            Subscription existing = call(() -> requireStore().findSubscription(url));
+            return refresh(existing != null ? existing : Subscription.create(UUID.randomUUID().toString(), url), existing == null);
+        }
+        @Override public String refreshSubscription(String id) {
+            return refresh(call(() -> requireStore().subscription(id)), false);
+        }
+        @Override public void deleteSubscription(String id) {
+            call(() -> {
+                ConnectionProfile current = requireStore().selected();
+                store.deleteSubscription(id);
+                if (current != null && store.selected() == null) { cancelRestart(); stopCore(); connectionState="NO_SELECTION"; error=""; }
+                publish(); return null;
+            });
+        }
+        @Override public void refreshDueSubscriptions() { network.execute(PocketVpnService.this::refreshDue); }
+        @Override public String pingConnections(String subscriptionId) {
+            List<ConnectionProfile> servers = call(() -> {
+                List<ConnectionProfile> chosen = new java.util.ArrayList<>();
+                for (ConnectionProfile value : requireStore().all()) if (value.subscription.equals(subscriptionId)) chosen.add(value);
+                return chosen;
+            });
+            Network real = call(() -> platform != null ? platform.getUnderlyingNetwork() : null);
+            if (real == null) real = getSystemService(android.net.ConnectivityManager.class).getActiveNetwork();
+            JSONObject result = new JSONObject();
+            try { for (java.util.Map.Entry<String, Long> entry : ServerPing.all(PocketVpnService.this, real, servers).entrySet()) result.put(entry.getKey(), entry.getValue()); }
+            catch (org.json.JSONException ignored) { }
+            return result.toString();
+        }
     };
+
+    /** Downloads and stores a subscription; runs on the caller's thread so the core keeps running meanwhile. */
+    private String refresh(Subscription sub, boolean isNew) {
+        long now = System.currentTimeMillis();
+        Subscription.Response response;
+        ProfileImporter.Result parsed;
+        try {
+            response = Subscription.download(sub.url, "Pocket/" + net.typeblog.shelter.BuildConfig.VERSION_NAME);
+            parsed = ProfileImporter.parse(response.body);
+        } catch (java.io.IOException | IllegalArgumentException e) {
+            // Other network errors may carry the secret link in their message.
+            final String text = e instanceof Subscription.Failure ? e.getMessage()
+                    : e instanceof IllegalArgumentException ? "В подписке нет поддерживаемых серверов. " + e.getMessage()
+                    : "Подписка не загрузилась. Проверь интернет и ссылку.";
+            if (!isNew) call(() -> { store.updateSubscription(sub.failed(text, now)); return null; });
+            throw new IllegalArgumentException(text);
+        }
+        Subscription fresh = sub.updated(response.headers, response.body, now);
+        return call(() -> {
+            List<String> changed = requireStore().applySubscription(fresh, parsed.profiles);
+            boolean gone = changed.remove(ProfileStore.SELECTED_GONE);
+            if (store.selectedId() != null && changed.contains(store.selectedId())) { cancelRestart(); stopCore(); retries=0; startSelected(); }
+            publish();
+            JSONObject result = new JSONObject().put("id", fresh.id).put("title", fresh.toJson(false).getString("title"))
+                    .put("count", parsed.profiles.size()).put("skipped", parsed.warnings.size()).put("selectedGone", gone);
+            for (ConnectionProfile value : store.all()) {
+                if (value.subscription.equals(fresh.id)) { result.put("firstId", value.id); break; }
+            }
+            if (!parsed.warnings.isEmpty()) result.put("warning", parsed.warnings.get(0));
+            return result.toString();
+        });
+    }
+
+    /** Background update by the provider's interval; failures keep the last working list. */
+    private void refreshDue() {
+        if (closed) return;
+        List<Subscription> due = new java.util.ArrayList<>();
+        try {
+            List<Subscription> all = call(() -> store == null ? new java.util.ArrayList<Subscription>() : store.subscriptions());
+            long now = System.currentTimeMillis();
+            for (Subscription sub : all) if (sub.due(now)) due.add(sub);
+        } catch (RuntimeException e) { return; }
+        for (Subscription sub : due) {
+            try { refresh(sub, false); } catch (RuntimeException e) { android.util.Log.w("PocketVPN", "Subscription update failed"); }
+        }
+    }
 
     private static final String PREFS = "pocket_routing", PREF_DIRECT_RU = "direct_ru";
     private List<String> russianNetworks;
@@ -126,6 +208,7 @@ public class PocketVpnService extends VpnService {
             catch (RuntimeException e) { storeError="Защищённые настройки недоступны. Исходные данные сохранены."; error=storeError; connectionState="ERROR"; }
             publish();
         });
+        network.scheduleWithFixedDelay(this::refreshDue, 1, 30, TimeUnit.MINUTES);
     }
 
     @Override public IBinder onBind(Intent intent) {
@@ -364,6 +447,7 @@ public class PocketVpnService extends VpnService {
         closed=true;
         worker.execute(() -> { cancelRestart(); stopCore(); });
         worker.shutdown();
+        network.shutdownNow();
         super.onDestroy();
     }
 }

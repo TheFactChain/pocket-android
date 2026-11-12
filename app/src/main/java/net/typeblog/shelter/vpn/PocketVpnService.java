@@ -135,14 +135,25 @@ public class PocketVpnService extends VpnService {
         }
     };
 
+    // shortcut: fixed client names; if a panel blocks them too, add a per-subscription choice of client.
+    private static final String[] SUBSCRIPTION_AGENTS = {"Happ/3.11.0", "v2rayNG/1.10.16",
+            "Pocket/" + net.typeblog.shelter.BuildConfig.VERSION_NAME};
+
     /** Downloads and stores a subscription; runs on the caller's thread so the core keeps running meanwhile. */
     private String refresh(Subscription sub, boolean isNew) {
         long now = System.currentTimeMillis();
-        Subscription.Response response;
-        ProfileImporter.Result parsed;
+        Subscription.Response response = null;
+        ProfileImporter.Result parsed = null;
         try {
-            response = Subscription.download(sub.url, "Pocket/" + net.typeblog.shelter.BuildConfig.VERSION_NAME);
-            parsed = ProfileImporter.parse(response.body);
+            // Panels choose the format by User-Agent and send unknown apps a single «app not supported» stub,
+            // so ask as the clients whose formats Pocket reads: Happ (Xray JSON), then v2rayNG (links).
+            IllegalArgumentException firstProblem = null;
+            for (String agent : SUBSCRIPTION_AGENTS) {
+                response = Subscription.download(sub.url, agent);
+                try { parsed = ProfileImporter.parse(response.body); break; }
+                catch (IllegalArgumentException e) { if (firstProblem == null) firstProblem = e; }
+            }
+            if (parsed == null) throw firstProblem;
         } catch (java.io.IOException | IllegalArgumentException e) {
             // Other network errors may carry the secret link in their message.
             final String text = e instanceof Subscription.Failure ? e.getMessage()
@@ -152,17 +163,18 @@ public class PocketVpnService extends VpnService {
             throw new IllegalArgumentException(text);
         }
         Subscription fresh = sub.updated(response.headers, response.body, now);
+        final ProfileImporter.Result parsedServers = parsed;
         return call(() -> {
-            List<String> changed = requireStore().applySubscription(fresh, parsed.profiles);
+            List<String> changed = requireStore().applySubscription(fresh, parsedServers.profiles);
             boolean gone = changed.remove(ProfileStore.SELECTED_GONE);
             if (store.selectedId() != null && changed.contains(store.selectedId())) { cancelRestart(); stopCore(); retries=0; startSelected(); }
             publish();
             JSONObject result = new JSONObject().put("id", fresh.id).put("title", fresh.toJson(false).getString("title"))
-                    .put("count", parsed.profiles.size()).put("skipped", parsed.warnings.size()).put("selectedGone", gone);
+                    .put("count", parsedServers.profiles.size()).put("skipped", parsedServers.warnings.size()).put("selectedGone", gone);
             for (ConnectionProfile value : store.all()) {
                 if (value.subscription.equals(fresh.id)) { result.put("firstId", value.id); break; }
             }
-            if (!parsed.warnings.isEmpty()) result.put("warning", parsed.warnings.get(0));
+            if (!parsedServers.warnings.isEmpty()) result.put("warning", parsedServers.warnings.get(0));
             return result.toString();
         });
     }

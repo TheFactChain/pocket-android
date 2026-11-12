@@ -52,7 +52,6 @@ final class ConnectionsPage extends Page {
 
     @Override String title() { return "Прокси"; }
 
-    @Override boolean secure() { return true; }
 
     @Override void build() {
         LinearLayout group = group();
@@ -389,8 +388,6 @@ final class ConnectionsPage extends Page {
         scroll.addView(body);
         sheet = new BottomSheetDialog(a);
         sheet.setContentView(scroll);
-        // Passwords may be on screen: keep them out of screenshots and the recents preview.
-        if (sheet.getWindow() != null) sheet.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         ((TextView) body.findViewById(R.id.sheet_title)).setText(title);
         BottomSheetDialog current = sheet;
         body.findViewById(R.id.sheet_close).setOnClickListener(v -> current.dismiss());
@@ -595,7 +592,9 @@ final class ConnectionsPage extends Page {
                 confirmDelete(id, values.optString("name"), active);
             });
         }
-        openSheet(body, id != null ? "Изменить подключение" : values != null ? "Введи пароль" : "Новое подключение");
+        BottomSheetDialog editor = openSheet(body, id != null ? "Изменить подключение" : values != null ? "Введи пароль" : "Новое подключение");
+        // Only the editor shows passwords: keep it out of screenshots and the recents preview.
+        if (editor.getWindow() != null) editor.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         if (values != null && id == null) (current.equals("hysteria2") ? auth : password).requestFocus();
     }
 

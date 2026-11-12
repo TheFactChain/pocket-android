@@ -163,17 +163,19 @@ public class ShelterService extends Service {
                     mStartActivityProxy.startActivity(intent);
             } else {
                 if (mIsProfileOwner) {
-                    // We can only enable system apps in our own profile
-                    mPolicyManager.enableSystemApp(
-                            mAdminComponent,
-                            app.getPackageName());
-
-                    // Also set the hidden state to false.
-                    mPolicyManager.setApplicationHidden(
-                            mAdminComponent,
-                            app.getPackageName(), false);
-
-                    callback.callback(Activity.RESULT_OK);
+                    // The personal APK is shared: enabling it creates only a separate data copy in this profile.
+                    boolean installed;
+                    try {
+                        mPolicyManager.enableSystemApp(mAdminComponent, app.getPackageName());
+                        mPolicyManager.setApplicationHidden(mAdminComponent, app.getPackageName(), false);
+                        installed = (mPackageManager.getApplicationInfo(app.getPackageName(), 0).flags
+                                & ApplicationInfo.FLAG_INSTALLED) != 0
+                                && !mPolicyManager.isApplicationHidden(mAdminComponent, app.getPackageName());
+                    } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+                        android.util.Log.w("PocketApps", "System app enable failed: " + e.getClass().getSimpleName());
+                        installed = false;
+                    }
+                    callback.callback(installed ? Activity.RESULT_OK : RESULT_CANNOT_INSTALL_SYSTEM_APP);
                 } else {
                     callback.callback(RESULT_CANNOT_INSTALL_SYSTEM_APP);
                 }

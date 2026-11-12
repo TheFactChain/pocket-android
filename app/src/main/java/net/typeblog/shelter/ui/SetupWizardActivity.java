@@ -3,6 +3,7 @@ package net.typeblog.shelter.ui;
 import androidx.activity.EdgeToEdge;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContract;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -17,11 +18,14 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.android.setupwizardlib.SetupWizardLayout;
 import com.android.setupwizardlib.view.NavigationBar;
@@ -46,6 +50,8 @@ public class SetupWizardActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<Void> mProvisionProfile =
             registerForActivityResult(new ProfileProvisionContract(), this::setupProfileCb);
+    private final ActivityResultLauncher<Intent> mManageProfile =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> setupProfile());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,12 +73,14 @@ public class SetupWizardActivity extends AppCompatActivity {
         // Don't use switchToFragment for the first time
         // because we don't want animation for the first fragment
         // (it would have nothing to animate upon, resulting in a black background)
-        getSupportFragmentManager()
-                .beginTransaction()
-                .replace(R.id.setup_wizard_container,
-                        ACTION_RESUME_SETUP.equals(getIntent().getAction()) ?
-                                new ActionRequiredFragment() : new WelcomeFragment())
-                .commit();
+        if (savedInstanceState == null) {
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.setup_wizard_container,
+                            ACTION_RESUME_SETUP.equals(getIntent().getAction()) ?
+                                    new ActionRequiredFragment() : new WelcomeFragment())
+                    .commit();
+        }
     }
 
     @Override
@@ -102,10 +110,11 @@ public class SetupWizardActivity extends AppCompatActivity {
 
     private void setupProfile() {
         if (!mPolicyManager.isProvisioningAllowed(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE)) {
-            switchToFragment(new FailedFragment(), false);
+            switchToFragment(new ProfileBlockedFragment(), false);
             return;
         }
 
+        switchToFragment(new PleaseWaitFragment(), false);
         // The user may have aborted provisioning before without clearing data
         // This can cause issues if the authentication utility thinks we
         // could do authentication due to the presence of keys
@@ -117,6 +126,18 @@ public class SetupWizardActivity extends AppCompatActivity {
             // How could this fail???
             switchToFragment(new FailedFragment(), false);
         }
+    }
+
+    private void openProfileSettings() {
+        for (String action : new String[]{Settings.ACTION_SYNC_SETTINGS, Settings.ACTION_SETTINGS}) {
+            try {
+                mManageProfile.launch(new Intent(action));
+                return;
+            } catch (ActivityNotFoundException | SecurityException unavailable) {
+                // Some firmware omits or restricts the dedicated work-profile settings screen.
+            }
+        }
+        Toast.makeText(this, R.string.setup_profile_settings_unavailable, Toast.LENGTH_LONG).show();
     }
 
     private void setupProfileCb(Boolean result) {
@@ -178,6 +199,9 @@ public class SetupWizardActivity extends AppCompatActivity {
             Intent intent = new Intent(DevicePolicyManager.ACTION_PROVISION_MANAGED_PROFILE);
             intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_SKIP_ENCRYPTION, true);
             intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME, admin);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.putExtra(DevicePolicyManager.EXTRA_PROVISIONING_ALLOW_OFFLINE, true);
+            }
             return intent;
         }
 
@@ -365,7 +389,6 @@ public class SetupWizardActivity extends AppCompatActivity {
         @Override
         public void onNavigateNext() {
             super.onNavigateNext();
-            mActivity.switchToFragment(new PleaseWaitFragment(), false);
             mActivity.setupProfile();
         }
 
@@ -373,6 +396,30 @@ public class SetupWizardActivity extends AppCompatActivity {
         public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
             super.onViewCreated(view, savedInstanceState);
             mWizard.setHeaderText(R.string.setup_wizard_ready);
+        }
+    }
+
+    public static class ProfileBlockedFragment extends TextWizardFragment {
+        @Override protected int getLayoutResource() {
+            return R.layout.fragment_setup_wizard_generic_text;
+        }
+
+        @Override protected int getTextRes() {
+            return R.string.setup_profile_blocked_text;
+        }
+
+        @Override public void onNavigateBack() {
+            mActivity.switchToFragment(new ReadyFragment(), true);
+        }
+
+        @Override public void onNavigateNext() {
+            mActivity.openProfileSettings();
+        }
+
+        @Override public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
+            mWizard.setHeaderText(R.string.setup_profile_blocked_title);
+            mWizard.getNavigationBar().getNextButton().setText(R.string.setup_profile_open_settings);
         }
     }
 

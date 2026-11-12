@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_profile_blocked_title">Android cannot create a work profile yet</string>
+    <string name="setup_profile_blocked_text">A work profile may remain from an earlier installation, or Android may restrict creating one.\n\nOpen the system settings and check who manages the existing profile. Remove it only if you are sure it is your old Pocket profile and you no longer need its data. Removing a profile deletes all apps and data inside it. Do not remove a profile managed by another app or organization.\n\nAfter removing the old profile, return to Pocket. Setup will continue when Android allows creating a new profile.</string>
+    <string name="setup_profile_open_settings">Open settings</string>
+    <string name="setup_profile_settings_unavailable">Could not open settings. Open your phone settings, find work profiles or accounts, then return to Pocket and try setup again.</string>
+</resources>

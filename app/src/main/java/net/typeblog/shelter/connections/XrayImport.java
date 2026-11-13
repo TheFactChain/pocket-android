@@ -11,7 +11,7 @@ import static net.typeblog.shelter.connections.ConnectionProfile.string;
 
 /**
  * Xray configs as Happ «JSON» subscriptions serve them: a list of full configs, one proxy server each.
- * Only the server's connection parameters are taken; routing, DNS and every other section are ignored.
+ * The server's connection parameters are taken, plus its plain direct/block routing rules (see rules()); DNS and the rest are ignored.
  * Xray has many fields the core does not need, so unknown fields are ignored, but anything that would
  * weaken the connection (no TLS check, chained servers, unknown masks) skips the server with a warning.
  */
@@ -83,10 +83,75 @@ final class XrayImport {
             else if (protocol.equals("hysteria") || protocol.equals("hysteria2")) flat = hysteria(proxy.getJSONObject("settings"), stream);
             else throw invalid("протокол " + label(protocol) + " пока не поддерживается.");
             if (!remarks.isEmpty()) flat.put("name", remarks.length() > 256 ? remarks.substring(0, 256) : remarks);
+            JSONArray rules = rules(config, outbounds);
+            if (rules.length() > 0) flat.put("rules", rules.toString());
             return ConnectionProfile.fromJson(flat);
         } catch (JSONException e) {
             throw invalid("некорректные поля сервера.");
         }
+    }
+
+    /**
+     * The provider's routing rules that send traffic straight out (freedom) or drop it (blackhole), as sing-box
+     * rules {action: direct|block, domain, domain_suffix, domain_keyword, ip_cidr}. Pocket applies them only when
+     * the user turns «Правила провайдера» on. Rules with other conditions, regexps and geosite/geoip lists are left
+     * out: they need data files Pocket does not ship, and a partial rule could send more traffic direct than meant.
+     */
+    static JSONArray rules(JSONObject config, JSONArray outbounds) throws JSONException {
+        JSONArray result = new JSONArray();
+        JSONObject routing = config.optJSONObject("routing");
+        JSONArray list = routing == null ? null : routing.optJSONArray("rules");
+        if (list == null || outbounds == null) return result;
+        java.util.Map<String, String> kind = new java.util.HashMap<>();
+        for (int i = 0; i < outbounds.length(); i++) {
+            JSONObject outbound = outbounds.optJSONObject(i);
+            if (outbound == null) continue;
+            String protocol = outbound.optString("protocol");
+            if (protocol.equals("freedom")) kind.put(outbound.optString("tag"), "direct");
+            else if (protocol.equals("blackhole")) kind.put(outbound.optString("tag"), "block");
+        }
+        java.util.Set<String> known = new java.util.HashSet<>(java.util.Arrays.asList("type", "outboundTag", "domain", "ip", "ruleTag"));
+        for (int i = 0; i < list.length() && result.length() < 64; i++) {
+            JSONObject rule = list.optJSONObject(i);
+            String action = rule == null ? null : kind.get(rule.optString("outboundTag"));
+            if (action == null) continue;
+            boolean plain = true;
+            for (java.util.Iterator<String> keys = rule.keys(); keys.hasNext();) plain &= known.contains(keys.next());
+            if (!plain) continue;
+            JSONArray domain = new JSONArray(), suffix = new JSONArray(), keyword = new JSONArray(), cidr = new JSONArray();
+            JSONArray domains = rule.optJSONArray("domain"), ips = rule.optJSONArray("ip");
+            if (domains != null && ips != null) continue; // Xray ANDs them, sing-box would OR them: wider than meant
+            for (int k = 0; domains != null && k < domains.length() && k < 2048; k++) {
+                String d = domains.optString(k).trim().toLowerCase(java.util.Locale.ROOT);
+                if (d.startsWith("domain:")) suffix.put(d.substring(7));
+                else if (d.startsWith("full:")) domain.put(d.substring(5));
+                else if (d.startsWith("keyword:")) keyword.put(d.substring(8));
+                else if (!d.isEmpty() && !d.contains(":")) keyword.put(d); // Xray: a bare string matches anywhere in the name
+            }
+            for (int k = 0; ips != null && k < ips.length() && k < 4096; k++) {
+                String ip = ips.optString(k).trim();
+                if (isCidr(ip)) cidr.put(ip);
+            }
+            JSONObject out = new JSONObject().put("action", action);
+            if (domain.length() > 0) out.put("domain", domain);
+            if (suffix.length() > 0) out.put("domain_suffix", suffix);
+            if (keyword.length() > 0) out.put("domain_keyword", keyword);
+            if (cidr.length() > 0) out.put("ip_cidr", cidr);
+            if (out.length() > 1) result.put(out);
+        }
+        return result;
+    }
+
+    /** A literal IPv4/IPv6 address with an optional prefix; anything else would make sing-box refuse the whole config. */
+    static boolean isCidr(String value) {
+        int slash = value.indexOf('/');
+        String address = slash < 0 ? value : value.substring(0, slash);
+        boolean v6 = address.contains(":");
+        if (v6 ? !address.matches("[0-9a-fA-F:]+(\\.[0-9.]+)?") : !address.matches("(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)")) return false;
+        if (slash >= 0 && !value.substring(slash + 1).matches("\\d{1,3}")) return false;
+        if (slash >= 0 && Integer.parseInt(value.substring(slash + 1)) > (v6 ? 128 : 32)) return false;
+        // An address with ':' is parsed as an IPv6 literal, never looked up by name.
+        try { return !v6 || java.net.InetAddress.getByName(address) instanceof java.net.Inet6Address; } catch (java.net.UnknownHostException e) { return false; }
     }
 
     /** Tag of the outbound this one dials through, or empty. */

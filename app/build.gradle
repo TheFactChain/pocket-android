@@ -16,8 +16,8 @@ android {
         applicationId 'io.github.nekontritce11123.pocketandroid'
         minSdk 29
         targetSdk 35
-        versionCode providers.gradleProperty('pocketVersionCode').getOrElse('22').toInteger()
-        versionName providers.gradleProperty('pocketVersionName').getOrElse('0.6.0')
+        versionCode providers.gradleProperty('pocketVersionCode').getOrElse('23').toInteger()
+        versionName providers.gradleProperty('pocketVersionName').getOrElse('0.7.0')
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     signingConfigs {

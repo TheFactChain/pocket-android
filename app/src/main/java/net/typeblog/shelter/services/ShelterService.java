@@ -319,6 +319,7 @@ public class ShelterService extends Service {
         @Override public void activateConnection(String id) throws RemoteException { vpn().activateConnection(id); }
         @Override public void deleteConnection(String id) throws RemoteException { vpn().deleteConnection(id); }
         @Override public void setDirectRu(boolean enabled) throws RemoteException { vpn().setDirectRu(enabled); }
+        @Override public void setProviderRules(boolean enabled) throws RemoteException { vpn().setProviderRules(enabled); }
         @Override public void checkConnectionNow() throws RemoteException { vpn().checkNow(); }
         @Override public void setIpControl(boolean enabled, int minutes) throws RemoteException { vpn().setIpControl(enabled, minutes); }
         @Override public void confirmIp() throws RemoteException { vpn().confirmIp(); }

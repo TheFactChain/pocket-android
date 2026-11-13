@@ -29,13 +29,15 @@ public final class ConnectionProfile {
     public final boolean fragment;
     /** VLESS only: the provider's Xray outbounds as served (the server first, then the servers it is chained through), or empty. */
     public final String xray;
+    /** The provider's direct/block rules in sing-box form (see XrayImport.rules), or empty; applied only when the user allows. */
+    public final String rules;
     /** Types offered in the interface, as in Pocket Windows; VLESS stays readable by code only. */
     public static final java.util.List<String> UI_TYPES = Arrays.asList("hysteria2", "socks5", "http", "https");
 
     private ConnectionProfile(JSONObject json) {
         requireKeys(json, "id", "name", "type", "server", "port", "password", "uuid",
                 "serverName", "realityPublicKey", "shortId", "fingerprint", "flow", "obfsPassword", "username",
-                "security", "transport", "path", "host", "subscription", "fragment", "xray");
+                "security", "transport", "path", "host", "subscription", "fragment", "xray", "rules");
         subscription = string(json, "subscription", "");
         if (subscription.length() > 128) throw invalid("Некорректная подписка подключения.");
         id =string(json, "id", UUID.randomUUID().toString());
@@ -82,6 +84,14 @@ public final class ConnectionProfile {
             catch (JSONException e) { throw invalid("Некорректная конфигурация Xray подключения."); }
         }
         xray = chain;
+        Object rulesValue = json.opt("rules");
+        if (rulesValue != null && !(rulesValue instanceof String)) throw invalid("Неверный тип поля подключения.");
+        String ruleText = rulesValue == null ? "" : (String) rulesValue;
+        if (!ruleText.isEmpty()) {
+            if (ruleText.length() > 262144) throw invalid("Слишком много правил провайдера.");
+            try { new JSONArray(ruleText); } catch (JSONException e) { throw invalid("Некорректные правила провайдера."); }
+        }
+        rules = ruleText;
         if (!type.equals("vless")) { security = ""; transport = ""; path = ""; wsHost = ""; }
         else {
             // Stored before TLS and transports existed: REALITY over TCP.
@@ -144,7 +154,7 @@ public final class ConnectionProfile {
                     .put("shortId", shortId).put("fingerprint", fingerprint).put("flow", flow)
                     .put("obfsPassword", obfsPassword).put("username", username)
                     .put("security", security).put("transport", transport).put("path", path).put("host", wsHost)
-                    .put("subscription", subscription).put("fragment", fragment).put("xray", xray);
+                    .put("subscription", subscription).put("fragment", fragment).put("xray", xray).put("rules", rules);
         } catch (JSONException e) {
             throw invalid("Не удалось сериализовать подключение.");
         }

@@ -36,6 +36,11 @@ public final class PocketConfig {
     }
 
     public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu, JSONObject carrier, List<AppRoute> apps) {
+        return create(profile, resolvedServer, directRu, carrier, apps, false);
+    }
+
+    /** @param providerRules apply the selected server's own direct/block rules (ConnectionProfile.rules); off unless the user turned it on. */
+    public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu, JSONObject carrier, List<AppRoute> apps, boolean providerRules) {
         // An enabled setting without its list fails closed, as in Windows.
         if (directRu != null && directRu.isEmpty()) throw new IllegalArgumentException("Нет списка российских сетей");
         try {
@@ -69,11 +74,32 @@ public final class PocketConfig {
                 appRules.put(new JSONObject().put("package_name", names).put("outbound", app.outbound.getString("tag")));
                 outbounds.put(app.outbound);
             }
+            // The provider's rules: «direct» TCP leaves outside the proxy on purpose, «block» is refused. They come after
+            // the UDP rejects and, with directRu, after the DNS-port and IP-echo protection, so they never widen those.
+            JSONArray stored = providerRules && !profile.rules.isEmpty() ? new JSONArray(profile.rules) : new JSONArray();
+            JSONArray provider = new JSONArray();
+            boolean providerDirect = false;
+            for (int i = 0; i < stored.length(); i++) {
+                JSONObject rule = new JSONObject(stored.getJSONObject(i).toString());
+                String action = rule.optString("action");
+                rule.remove("action");
+                if (action.equals("direct")) { rule.put("network", "tcp").put("outbound", "direct"); providerDirect = true; }
+                else rule.put("action", "reject");
+                provider.put(rule);
+            }
             if (appRules.length() > 0) {
                 JSONArray ordered = new JSONArray().put(rules.get(0)).put(rules.get(1));
                 for (int i = 0; i < appRules.length(); i++) ordered.put(appRules.get(i));
                 for (int i = 2; i < rules.length(); i++) ordered.put(rules.get(i));
                 rules = ordered;
+            }
+            // With directRu the sniff rule and the direct outbound are added below.
+            if (provider.length() > 0 && directRu == null) {
+                JSONArray sniffed = new JSONArray().put(new JSONObject().put("action", "sniff"));
+                for (int i = 0; i < rules.length(); i++) sniffed.put(rules.get(i));
+                for (int i = 0; i < provider.length(); i++) sniffed.put(provider.get(i));
+                rules = sniffed;
+                if (providerDirect) outbounds.put(new JSONObject().put("type", "direct").put("tag", "direct"));
             }
             JSONObject route = new JSONObject().put("auto_detect_interface", true).put("final", "proxy");
             if (appRules.length() > 0) route.put("find_process", true);
@@ -86,8 +112,9 @@ public final class PocketConfig {
                 JSONArray withDirect = new JSONArray().put(new JSONObject().put("action", "sniff"));
                 for (int i = 0; i < rules.length(); i++) withDirect.put(rules.get(i));
                 withDirect.put(new JSONObject().put("port", new JSONArray().put(53).put(853)).put("outbound", "proxy"))
-                        .put(new JSONObject().put("domain_suffix", echo).put("outbound", "proxy"))
-                        .put(new JSONObject().put("network", "tcp").put("rule_set", "ru-ipv4").put("outbound", "direct"));
+                        .put(new JSONObject().put("domain_suffix", echo).put("outbound", "proxy"));
+                for (int i = 0; i < provider.length(); i++) withDirect.put(provider.get(i));
+                withDirect.put(new JSONObject().put("network", "tcp").put("rule_set", "ru-ipv4").put("outbound", "direct"));
                 rules = withDirect;
                 outbounds.put(new JSONObject().put("type", "direct").put("tag", "direct"));
                 route.put("rule_set", new JSONArray().put(new JSONObject().put("type", "inline").put("tag", "ru-ipv4")

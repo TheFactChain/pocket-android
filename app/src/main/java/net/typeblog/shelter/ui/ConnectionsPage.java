@@ -85,6 +85,10 @@ final class ConnectionsPage extends Page {
         statusParams.topMargin = a.dp(8);
         statusParams.bottomMargin = a.dp(20);
         content.addView(checkStatus, statusParams);
+        // «Сейчас»: the server in use, the address sites see and its quality, with the check one tap away.
+        current = new LinearLayout(a);
+        current.setOrientation(LinearLayout.VERTICAL);
+        content.addView(current, new LinearLayout.LayoutParams(-1, -2));
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         content.addView(list, new LinearLayout.LayoutParams(-1, -2));
@@ -196,14 +200,61 @@ final class ConnectionsPage extends Page {
     @Override void onState() {
         view();
         // The rating and ping of the server in use arrive with the state, so they count as a change too.
-        String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId") + HomePage.exitVerdict(a.state));
+        String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId") + a.state.optString("exitIp")
+                + a.state.optString("exitStatus") + a.state.optLong("exitIpTime") + a.state.optString("ratings"));
         if (!json.equals(shownList)) { shownList = json; renderList(); }
         if (metricsPage.showing()) metricsPage.onState();
         stateText.setText(a.state == null ? a.linkProblem : "");
         stateText.setVisibility(a.state == null ? View.VISIBLE : View.GONE);
     }
 
+    private LinearLayout current;
+
+    /** The «Сейчас» card: exit IP and its rating for the server in use. Other servers are not rated: that would need extra sessions through them. */
+    private void renderCurrent() {
+        current.removeAllViews();
+        JSONObject s = a.state;
+        String name = s == null ? "" : s.optString("selectedName");
+        if (name.isEmpty()) return;
+        LinearLayout card = card(current);
+        TextView label = small(card, "Сейчас", R.color.muted);
+        label.setPadding(a.dp(16), a.dp(14), a.dp(16), 0);
+        RowView row = new RowView(a);
+        String flag = flag(name), shown = flag.isEmpty() ? name : name.replace(flag, " ").replaceAll("\\s+", " ").trim();
+        row.setGlyph(flag.isEmpty() ? shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT) : flag, true);
+        row.setTitle(shown).setTitleBold(true);
+        row.setBackground(null);
+        String ip = s.optString("exitIp"), status = s.optString("exitStatus");
+        row.setCaption(!ip.isEmpty() ? "IP " + ip + (s.optLong("exitIpTime") > 0 ? " · проверен " + HomePage.time(s.optLong("exitIpTime")) : "")
+                : "CHECKING".equals(status) ? "Узнаём внешний IP…" : "UNAVAILABLE".equals(status) ? "Сервис проверки недоступен" : "IP ещё не проверен");
+        JSONArray list = s.optJSONArray("ratings");
+        JSONObject r = list == null || list.length() == 0 ? null : list.optJSONObject(0);
+        String risk = r == null ? "" : r.optString("risk");
+        boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
+        if (r != null) row.setPill(low ? "Чистый" : mid ? "Подозрительный" : high ? "Похож на VPN" : "Нет оценки",
+                a.color(low ? R.color.green_soft : mid ? R.color.orange_soft : high ? R.color.danger_soft : R.color.grey_soft),
+                a.color(low ? R.color.green_ink : mid ? R.color.orange_ink : high ? R.color.danger : R.color.muted));
+        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        if (r != null && !r.optString("summary").isEmpty()) {
+            // The rating's own words (hosting, proxy, risk %) without repeating the verdict in the pill.
+            String summary = r.optString("summary"), detail = summary.contains(", ") ? summary.substring(summary.indexOf(", ") + 2) : "";
+            if (!detail.isEmpty()) small(card, r.optString("source") + ": " + detail, R.color.muted).setPadding(a.dp(60), 0, a.dp(16), a.dp(4));
+        }
+        LinearLayout actions = new LinearLayout(a);
+        actions.setPadding(a.dp(48), 0, a.dp(8), a.dp(8));
+        boolean checking = "CHECKING".equals(status);
+        TextView check = textAction(checking ? "Проверяем…" : "Проверить IP", v -> HomePage.checkExitIp(a));
+        check.setEnabled(!checking);
+        check.setAlpha(checking ? 0.5f : 1f);
+        actions.addView(check);
+        String url = r == null ? "" : r.optString("url");
+        if (!url.isEmpty()) actions.addView(textAction("Подробнее", v -> a.openUrl(url)));
+        actions.addView(textAction("Трафик", v -> { metricsPage.showAsSheet(); metricsPage.onState(); }));
+        card.addView(actions);
+    }
+
     private void renderList() {
+        renderCurrent();
         list.removeAllViews();
         subscriptionsHost.removeAllViews();
         String selected = a.state == null ? "" : a.state.optString("selectedId");
@@ -439,7 +490,7 @@ final class ConnectionsPage extends Page {
 
     /** The server in use also says what sites think of its exit; a tap on it opens the details. */
     private String rowCaption(String details, boolean isSelected) {
-        return isSelected ? "Используется · " + details + " · " + HomePage.exitVerdict(a.state) : details;
+        return isSelected ? "Используется · " + details : details;
     }
 
     static String servers(int n) {

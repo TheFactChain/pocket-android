@@ -113,6 +113,14 @@ public class PocketVpnService extends VpnService {
                 publish(); return null;
             });
         }
+        @Override public void setProviderRules(boolean enabled) {
+            call(() -> {
+                if (enabled == providerRules()) return null;
+                prefs().edit().putBoolean(PREF_PROVIDER_RULES, enabled).commit();
+                if (store != null && store.selected() != null) { cancelRestart(); stopCore(); retries=0; startSelected(); }
+                publish(); return null;
+            });
+        }
         @Override public void setIpControl(boolean enabled, int minutes) {
             call(() -> {
                 if (minutes < 1 || minutes > 1440) throw new IllegalArgumentException("Интервал: от 1 до 1440 минут");
@@ -347,6 +355,9 @@ public class PocketVpnService extends VpnService {
 
     /** «Российские сайты напрямую»: on by default, as in Pocket Windows. */
     private boolean directRu() { return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_DIRECT_RU, false); }
+    private static final String PREF_PROVIDER_RULES = "provider_rules";
+    /** The server's own direct/block rules from its Xray config: off by default, «direct» bypasses the proxy. */
+    private boolean providerRules() { return prefs().getBoolean(PREF_PROVIDER_RULES, false); }
     private static final String PREF_IP_CONTROL = "ip_control", PREF_IP_MINUTES = "ip_minutes",
             PREF_IP_CONFIRMED = "ip_confirmed", PREF_IP_PENDING = "ip_pending";
     private android.content.SharedPreferences prefs() { return getSharedPreferences(PREFS, MODE_PRIVATE); }
@@ -556,6 +567,53 @@ public class PocketVpnService extends VpnService {
             publish();
         });
         network.scheduleWithFixedDelay(this::refreshDue, 1, 30, TimeUnit.MINUTES);
+        interactive = getSystemService(android.os.PowerManager.class).isInteractive();
+        android.content.IntentFilter screen = new android.content.IntentFilter(Intent.ACTION_SCREEN_ON);
+        screen.addAction(Intent.ACTION_SCREEN_OFF);
+        registerReceiver(screenReceiver, screen);
+    }
+
+    // ---- Battery: the tunnel itself costs nothing extra; the checks around it follow the screen ----
+
+    /** Screen on: someone may look, so checks run every 30 s and traffic numbers flow. Screen off: one check in 5 min, no numbers. */
+    private volatile boolean interactive = true;
+    private CommandClient statusClient;
+    private final android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context context, Intent intent) {
+            boolean on = Intent.ACTION_SCREEN_ON.equals(intent.getAction());
+            interactive = on;
+            if (closed) return;
+            worker.execute(() -> {
+                if (client == null) return;
+                if (on) {
+                    // The status shown right after unlocking must be fresh, so the check runs now, not in up to 5 min.
+                    final int ticket = generation;
+                    if (probeDeadline == null || probeDeadline.isDone()) {
+                        if (probeTask != null) probeTask.cancel(false);
+                        probeTask = worker.schedule(() -> probe(ticket), 0, TimeUnit.MILLISECONDS);
+                    }
+                    startStatus(ticket);
+                } else stopStatus();
+            });
+        }
+    };
+
+    /** Traffic counters only while the screen is on; nobody reads them otherwise. */
+    private void startStatus(int ticket) {
+        if (statusClient != null || client == null) return;
+        try {
+            CommandClientOptions options = new CommandClientOptions();
+            options.addCommand(Libbox.CommandStatus);
+            options.setStatusInterval(2_000_000_000L);
+            statusClient = Libbox.newCommandClient(statusHandler(ticket), options);
+            statusClient.connect();
+        } catch (Exception e) { statusClient = null; }
+    }
+
+    private void stopStatus() {
+        CommandClient old = statusClient; statusClient = null;
+        uplink = downlink = 0; // the rate is stale once the screen is off; totals stay
+        if (old != null) try { old.disconnect(); } catch (Exception ignored) { }
     }
 
     @Override public IBinder onBind(Intent intent) {
@@ -777,7 +835,7 @@ public class PocketVpnService extends VpnService {
             }
             List<PocketConfig.AppRoute> apps = new java.util.ArrayList<>();
             for (int i = 0; i < extra.size(); i++) apps.add(new PocketConfig.AppRoute(byId.get(extra.get(i).id), appOutbounds[i], extra.get(i)));
-            String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier, apps);
+            String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier, apps, providerRules());
             Libbox.checkConfig(configuration);
             server = Libbox.newCommandServer(serverHandler(), platform);
             server.start();
@@ -785,10 +843,9 @@ public class PocketVpnService extends VpnService {
             runningId = selected.id;
             CommandClientOptions options = new CommandClientOptions();
             options.addCommand(Libbox.CommandOutbounds);
-            options.addCommand(Libbox.CommandStatus);
-            options.setStatusInterval(2_000_000_000L);
             client = Libbox.newCommandClient(clientHandler(ticket), options);
             client.connect();
+            if (interactive) startStatus(ticket);
             retries=0; probeFailures=0;
             probeTask = worker.schedule(() -> probe(ticket), 1200, TimeUnit.MILLISECONDS);
             scheduleIpCheck(ticket, 4000);
@@ -821,7 +878,7 @@ public class PocketVpnService extends VpnService {
                     publish();
                     if (probeFailures >= 3) { scheduleRetry(); return; }
                 }
-                probeTask=worker.schedule(() -> probe(ticket),30,TimeUnit.SECONDS);
+                probeTask=worker.schedule(() -> probe(ticket),interactive?30:300,TimeUnit.SECONDS);
             },17,TimeUnit.SECONDS);
         } catch (Exception e) {
             connectionState="RECONNECTING"; error="Связь восстанавливается"; publish(); scheduleRetry();
@@ -864,6 +921,25 @@ public class PocketVpnService extends VpnService {
         };
     }
 
+    private CommandClientHandler statusHandler(final int ticket) {
+        return new CommandClientHandler() {
+            @Override public void connected() {}
+            @Override public void disconnected(String ignored) {}
+            @Override public void writeOutbounds(OutboundGroupItemIterator values) {}
+            @Override public void clearLogs() {}
+            @Override public void initializeClashMode(StringIterator modes,String current) {}
+            @Override public void setDefaultLogLevel(int level) {}
+            @Override public void updateClashMode(String mode) {}
+            @Override public void writeConnectionEvents(ConnectionEvents events) {}
+            @Override public void writeGroups(OutboundGroupIterator groups) {}
+            @Override public void writeLogs(LogIterator logs) {}
+            @Override public void writeStatus(StatusMessage status) {
+                if(ticket!=generation||!status.getTrafficAvailable()) return;
+                uplink=status.getUplink(); downlink=status.getDownlink(); uplinkTotal=status.getUplinkTotal(); downlinkTotal=status.getDownlinkTotal();
+            }
+        };
+    }
+
     private CommandServerHandler serverHandler() {
         return new CommandServerHandler() {
             @Override public int connectSSHAgent() { throw new UnsupportedOperationException(); }
@@ -894,6 +970,7 @@ public class PocketVpnService extends VpnService {
         if(ipTask!=null){ipTask.cancel(false);ipTask=null;}
         uplink=downlink=uplinkTotal=downlinkTotal=sessionStart=selectedPing=0; exitStatus="";
         if(xrayRunning){ xrayRunning=false; try{io.nekohasekai.pocketxray.Pocketxray.stop();}catch(Exception ignored){} }
+        stopStatus();
         CommandClient oldClient=client; client=null;
         if(oldClient!=null) try{oldClient.disconnect();}catch(Exception ignored){}
         CommandServer oldServer=server; server=null;
@@ -910,7 +987,7 @@ public class PocketVpnService extends VpnService {
             JSONObject state=new JSONObject(snapshot);
             state.put("policyState",ProtectionPolicy.isOwner(this)?(ProtectionPolicy.confirmed(this)?"CONFIRMED":"UNCONFIRMED"):"NO_PROFILE");
             long checked=state.optLong("lastCheckElapsed",-1),now=android.os.SystemClock.elapsedRealtime();
-            if("CONNECTED".equals(state.optString("connectionState")) && (checked<0 || now<checked || now-checked>75000)) {
+            if("CONNECTED".equals(state.optString("connectionState")) && (checked<0 || now<checked || now-checked>(interactive?75000:330000))) {
                 state.put("connectionState","RECONNECTING"); state.put("error","Ожидаем свежую проверку связи");
             }
             state.put("appConnections",new JSONObject(appConnections().getAll()));
@@ -928,7 +1005,7 @@ public class PocketVpnService extends VpnService {
             JSONObject value=new JSONObject().put("policyState",ProtectionPolicy.confirmed(this)?"CONFIRMED":"UNCONFIRMED")
                     .put("connectionState",connectionState).put("selectedId",selected==null?"":selected.id)
                     .put("selectedName",selected==null?"":selected.name).put("runningId",runningId==null?"":runningId)
-                    .put("selectedType",selected==null?"":selected.typeLabel()).put("directRu",directRu())
+                    .put("selectedType",selected==null?"":selected.typeLabel()).put("directRu",directRu()).put("providerRules",providerRules())
                     .put("ipControl",prefs().getBoolean(PREF_IP_CONTROL,false)).put("ipMinutes",prefs().getInt(PREF_IP_MINUTES,30))
                     .put("ipStatus",ipStatus).put("ipObserved",ipObserved).put("ipConfirmed",prefs().getString(PREF_IP_CONFIRMED,""))
                     .put("ipPending",prefs().getString(PREF_IP_PENDING,""))
@@ -955,6 +1032,7 @@ public class PocketVpnService extends VpnService {
     }
     @Override public void onDestroy() {
         closed=true;
+        try { unregisterReceiver(screenReceiver); } catch (IllegalArgumentException ignored) { }
         worker.execute(() -> { cancelRestart(); stopCore(); });
         worker.shutdown();
         network.shutdownNow();

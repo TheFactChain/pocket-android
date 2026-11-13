@@ -18,8 +18,14 @@ import net.typeblog.shelter.BuildConfig;
 import net.typeblog.shelter.R;
 import net.typeblog.shelter.shop.ShopCatalog;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The only screen: what matters is always at hand. Proxy and updates are two small cards, the shop is the wide card
@@ -35,12 +41,15 @@ final class HomePage extends Page {
     private GradientDrawable proxyFill, updatesFill;
     private int proxyColor;
     private PocketStatus status;
+    private TextView metricsText, metricsCheck;
+    private final MetricsPage metrics;
 
     HomePage(MainActivity activity) {
         super(activity);
         apps = new AppsPage(activity);
         shop = new ShopPage(activity);
         settings = new MorePage(activity);
+        metrics = new MetricsPage(activity);
     }
 
     @Override View create(LayoutInflater inflater) {
@@ -85,8 +94,204 @@ final class HomePage extends Page {
         });
 
         tappable(root.findViewById(R.id.home_settings), settings::showAsSheet);
+        addMetricsCard((LinearLayout) root);
         apps.bind(root.findViewById(R.id.card_apps));
         return root;
+    }
+
+    /** Compact indicators card between the shop and the apps; tap opens the full list, «Диагностика» runs the check. */
+    private void addMetricsCard(LinearLayout root) {
+        LinearLayout card = new LinearLayout(a);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundResource(R.drawable.bg_card);
+        card.setPadding(a.dp(18), a.dp(12), a.dp(12), a.dp(4));
+        metricsText = new TextView(a);
+        metricsText.setTextColor(a.color(R.color.ink));
+        metricsText.setTextSize(14f);
+        metricsText.setLineSpacing(a.dp(2), 1f);
+        card.addView(metricsText, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout actions = new LinearLayout(a);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        metricsCheck = textAction("Проверить IP", v -> checkExitIp(a));
+        actions.addView(metricsCheck);
+        actions.addView(textAction("Диагностика", v -> new DiagnosticsPage(a).showAsSheet()));
+        card.addView(actions, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = a.dp(10);
+        root.addView(card, root.getChildCount() - 1, lp); // before the apps card, which keeps the remaining height
+        tappable(card, metrics::showAsSheet);
+    }
+
+    static void checkExitIp(MainActivity a) {
+        a.remote(() -> { a.mServiceWork.checkExitIp(); return null; },
+                x -> { a.toast("Проверяем внешний IP…"); a.refreshState(); }, "Не удалось запустить проверку IP.");
+    }
+
+    // ---- Formatting shared by the home card, the indicators sheet and the diagnostics ----
+
+    static String time(long ms) { return new SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(ms)); }
+
+    /** Text after «Внешний IP (выход): ». Never the server address, only what the service confirmed. */
+    static String exitValue(JSONObject s) {
+        if (s == null) return "не проверен";
+        String ip = s.optString("exitIp");
+        if (!ip.isEmpty()) return ip + (s.optLong("exitIpTime") > 0 ? ", проверен " + time(s.optLong("exitIpTime")) : "");
+        String st = s.optString("exitStatus");
+        return "CHECKING".equals(st) ? "проверяем…" : "UNAVAILABLE".equals(st) ? "сервис проверки недоступен" : "не проверен";
+    }
+
+    static String pingText(JSONObject s) {
+        long ping = s == null ? 0 : s.optLong("selectedPing");
+        return ping > 0 ? ping + " мс" : ping < 0 ? "нет ответа" : "не проверен";
+    }
+
+    static String rate(long v) {
+        if (v < 1024) return v + " Б/с";
+        if (v < 1048576) return Math.round(v / 1024.0) + " КБ/с";
+        return String.format(Locale.ROOT, "%.1f МБ/с", v / 1048576.0).replace('.', ',');
+    }
+
+    static String size(long v) { return v < 1048576 ? Math.round(v / 1024.0) + " КБ" : ConnectionsPage.bytes(v); }
+
+    static String trafficText(JSONObject s) {
+        if (s == null || !s.has("uplinkTotal") && !s.has("downlinkTotal")) return "—";
+        return "отдано " + size(s.optLong("uplinkTotal")) + " (" + rate(s.optLong("uplink")) + "), получено "
+                + size(s.optLong("downlinkTotal")) + " (" + rate(s.optLong("downlink")) + ")";
+    }
+
+    /** Remaining traffic and days of the subscription the selected server belongs to; «—» when it has none. */
+    static String subscriptionText(MainActivity a) {
+        try {
+            String id = a.state == null ? "" : a.state.optString("selectedId");
+            String sub = "";
+            for (int i = 0; !id.isEmpty() && i < a.connectionList.length(); i++) {
+                JSONObject c = a.connectionList.optJSONObject(i);
+                if (c != null && id.equals(c.optString("id"))) sub = c.optString("subscription");
+            }
+            if (sub.isEmpty()) return "—";
+            for (int i = 0; i < a.subscriptionList.length(); i++) {
+                JSONObject o = a.subscriptionList.optJSONObject(i);
+                if (o == null || !sub.equals(o.optString("id"))) continue;
+                StringBuilder sb = new StringBuilder(o.optString("title"));
+                long total = o.optLong("total");
+                if (total > 0) sb.append(sb.length() > 0 ? ": " : "").append("осталось ")
+                        .append(ConnectionsPage.bytes(Math.max(0, total - o.optLong("upload") - o.optLong("download"))));
+                long expire = o.optLong("expire");
+                if (expire > 0) {
+                    long days = (expire * 1000 - System.currentTimeMillis()) / 86400000L;
+                    sb.append(sb.length() > 0 ? ", " : "").append(days >= 0 ? days + " дн." : "срок истёк");
+                }
+                return sb.length() == 0 ? "—" : sb.toString();
+            }
+        } catch (RuntimeException ignored) { /* shown as unknown */ }
+        return "—";
+    }
+
+    private void showMetrics() {
+        JSONObject s = a.state;
+        String server = s == null || s.optString("selectedName").isEmpty() ? "Сервер не выбран" : s.optString("selectedName");
+        metricsText.setText(server + ", пинг: " + pingText(s) + "\nВнешний IP (выход): " + exitValue(s) + "\nТрафик: " + trafficText(s));
+        metricsCheck.setVisibility(s != null && s.optString("exitIp").isEmpty() ? View.VISIBLE : View.GONE);
+        if (metrics.showing()) metrics.onState();
+    }
+
+    /** Full list of indicators with the ratings (reference only). */
+    static final class MetricsPage extends Page {
+        private RowView server, exit, ping, traffic, sub, last;
+        private LinearLayout ratings;
+
+        MetricsPage(MainActivity activity) { super(activity); }
+
+        @Override String title() { return "Показатели"; }
+
+        @Override void build() {
+            LinearLayout g = group();
+            server = row(g, R.drawable.ic_globe, R.color.accent, "Сервер", null);
+            exit = row(g, R.drawable.ic_shield, R.color.green, "Внешний IP (выход)", null);
+            exit.setOnClickListener(v -> checkExitIp(a));
+            ping = row(g, R.drawable.ic_info, R.color.accent, "Пинг", null);
+            traffic = row(g, R.drawable.ic_download, R.color.accent, "Трафик за сеанс", null);
+            sub = row(g, R.drawable.ic_key, R.color.violet, "Подписка", null);
+            last = row(g, R.drawable.ic_check, R.color.green, "Последняя проверка", null);
+            ratings = group();
+            LinearLayout d = group();
+            row(d, R.drawable.ic_warning, R.color.orange, "Диагностика подключения", "Пошаговая проверка и отчёт")
+                    .setOnClickListener(v -> new DiagnosticsPage(a).showAsSheet());
+            caption(content, "Рейтинги IP справочные: это мнение сторонних сервисов, не гарантия.");
+        }
+
+        @Override void onState() {
+            view();
+            JSONObject s = a.state;
+            String name = s == null ? "" : s.optString("selectedName");
+            server.setCaption(name.isEmpty() ? "не выбран" : name);
+            boolean unknown = s == null || s.optString("exitIp").isEmpty();
+            exit.setCaption(exitValue(s) + (unknown ? ". Нажми, чтобы проверить" : ""));
+            ping.setCaption(pingText(s));
+            traffic.setCaption(trafficText(s));
+            sub.setCaption(subscriptionText(a));
+            long t = s == null ? 0 : s.optLong("lastCheckTime");
+            last.setCaption(t > 0 ? time(t) : "не проверено");
+            ratings.removeAllViews();
+            JSONArray list = s == null ? null : s.optJSONArray("ratings");
+            if (list == null || list.length() == 0) { row(ratings, R.drawable.ic_info, R.color.accent, "Рейтинги IP", "Нет данных (справочно)"); return; }
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject r = list.optJSONObject(i);
+                if (r == null) continue;
+                RowView row = row(ratings, R.drawable.ic_info, R.color.accent, r.optString("source", "Рейтинг") + " (справочно)", r.optString("summary", "—"));
+                String risk = r.optString("risk");
+                boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
+                row.setPill(low ? "низкий" : mid ? "средний" : high ? "высокий" : "н/д",
+                        a.color(low ? R.color.green_soft : mid ? R.color.orange_soft : high ? R.color.danger_soft : R.color.grey_soft),
+                        a.color(low ? R.color.green_ink : mid ? R.color.orange_ink : high ? R.color.danger : R.color.muted));
+                String url = r.optString("url");
+                if (!url.isEmpty()) row.setOnClickListener(v -> a.openUrl(url));
+            }
+        }
+    }
+
+    /** Runs the step-by-step check and shows each step with a mark and a word; the report has no secrets. */
+    static final class DiagnosticsPage extends Page {
+        private LinearLayout steps;
+        private String report = "";
+
+        DiagnosticsPage(MainActivity activity) { super(activity); }
+
+        @Override String title() { return "Диагностика"; }
+
+        @Override void build() {
+            steps = group();
+            content.addView(textAction("Скопировать отчёт", v -> {
+                if (report.isEmpty()) { a.toast("Отчёта пока нет."); return; }
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) a.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (cm != null) { cm.setPrimaryClip(android.content.ClipData.newPlainText("Pocket", report)); a.toast("Отчёт скопирован."); }
+            }), new LinearLayout.LayoutParams(-2, -2));
+        }
+
+        @Override void onShow() {
+            steps.removeAllViews();
+            report = "";
+            row(steps, R.drawable.ic_info, R.color.accent, "Проверяем…", "Это займёт несколько секунд");
+            a.remote(() -> new JSONObject(a.mServiceWork.diagnose()), this::show, "Не удалось выполнить диагностику.");
+        }
+
+        private void show(JSONObject result) {
+            steps.removeAllViews();
+            report = result.optString("report");
+            JSONArray list = result.optJSONArray("steps");
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject st = list.optJSONObject(i);
+                if (st == null) continue;
+                boolean known = st.has("ok") && !st.isNull("ok");
+                boolean ok = known && st.optBoolean("ok");
+                RowView row = row(steps, known ? (ok ? R.drawable.ic_check : R.drawable.ic_warning) : R.drawable.ic_info,
+                        known ? (ok ? R.color.green : R.color.orange) : R.color.accent, st.optString("title"), st.optString("detail"));
+                row.setPill(known ? (ok ? "✓ Успешно" : "✗ Сбой") : "Не проверено",
+                        a.color(known ? (ok ? R.color.green_soft : R.color.danger_soft) : R.color.grey_soft),
+                        a.color(known ? (ok ? R.color.green_ink : R.color.danger) : R.color.muted));
+            }
+            if (steps.getChildCount() == 0) row(steps, R.drawable.ic_info, R.color.accent, "Нет данных", "Служба не вернула шагов");
+        }
     }
 
     /** One chip per kind of goods in the catalog (Proxy first): what is sold, not prices. */
@@ -171,5 +376,6 @@ final class HomePage extends Page {
                 : a.updateLatest ? "Последняя версия" : "Нажми, чтобы проверить");
         updatesFill.setColor(a.color(offered ? R.color.pastel_green : R.color.pastel_blue));
         apps.setStatus(status);
+        showMetrics();
     }
 }

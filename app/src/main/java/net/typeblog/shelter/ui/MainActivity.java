@@ -400,6 +400,27 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         if (mServiceWork != null && new java.io.File(getFilesDir(), "pending-test-profile.json").isFile()) preparePocketConnection();
+        if (mServiceWork != null) handleAddLink();
+    }
+
+    /** pocket://add/<link or subscription URL>: offered for import after a confirmation, never connected by itself. */
+    private void handleAddLink() {
+        Intent intent = getIntent();
+        android.net.Uri data = intent == null ? null : intent.getData();
+        if (data == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || !"pocket".equals(data.getScheme()) || !"add".equals(data.getHost())) return;
+        setIntent(new Intent(this, MainActivity.class));
+        String raw = data.toString(), prefix = "pocket://add/";
+        if (!raw.regionMatches(true, 0, prefix, 0, prefix.length()) || raw.length() <= prefix.length()) return;
+        // A plain link keeps its own %-escapes (subscription tokens); a fully encoded one is decoded once.
+        String tail = raw.substring(prefix.length());
+        String link = (tail.contains("://") ? tail : android.net.Uri.decode(tail)).trim();
+        if (link.isEmpty() || link.length() > 65536) return;
+        String host = android.net.Uri.parse(link).getHost();
+        String scheme = (link.contains("://") ? link.substring(0, link.indexOf("://")) : "ссылка") + (host == null || host.isEmpty() ? "" : ", " + host);
+        new androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Добавить подключение?")
+                .setMessage("Другое приложение передало Pocket ссылку (" + scheme + "). Добавь её, только если она от твоего провайдера. Текущее подключение не изменится.")
+                .setPositiveButton("Добавить", (d, w) -> { openConnections(); connections().importText(link, null); })
+                .setNegativeButton("Отмена", null).show();
     }
 
     private void bindServices() {
@@ -459,6 +480,7 @@ public class MainActivity extends AppCompatActivity {
             registerStartActivityProxies();
             startKiller();
             preparePocketConnection();
+            handleAddLink();
             UpdatesPage.checkInBackground(this);
         }
     }

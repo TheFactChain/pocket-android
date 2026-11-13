@@ -21,6 +21,7 @@ import net.typeblog.shelter.services.IPocketVpnService;
 import net.typeblog.shelter.ui.OpenPocketActivity;
 import io.nekohasekai.libbox.*;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import java.io.File;
 import java.net.InetAddress;
@@ -56,6 +57,8 @@ public class PocketVpnService extends VpnService {
     private CommandClient client;
     private ScheduledFuture<?> restartTask, probeTask, probeDeadline, ipTask;
     private volatile String ipStatus = "", ipObserved = "";
+    private volatile long uplink, downlink, uplinkTotal, downlinkTotal, sessionStart, selectedPing;
+    private volatile String exitStatus = "";
     private boolean nativeReady, xrayRunning;
 
     private static String firstIpv4(InetAddress[] addresses) {
@@ -75,6 +78,7 @@ public class PocketVpnService extends VpnService {
             return call(() -> {
                 ConnectionProfile value = ConnectionProfile.fromJson(new JSONObject(json));
                 String id = requireStore().save(value);
+                synchronized (pings) { pings.remove(id); }
                 if (id.equals(store.selectedId())) { cancelRestart(); stopCore(); startSelected(); }
                 publish();
                 return id;
@@ -95,6 +99,8 @@ public class PocketVpnService extends VpnService {
             call(() -> {
                 boolean active = id.equals(requireStore().selectedId());
                 store.delete(id);
+                exits().edit().remove(id).apply();
+                synchronized (pings) { pings.remove(id); }
                 if (active) { cancelRestart(); stopCore(); connectionState="NO_SELECTION"; error=""; }
                 publish(); return null;
             });
@@ -118,6 +124,19 @@ public class PocketVpnService extends VpnService {
                 publish(); return null;
             });
         }
+        @Override public void setAppConnection(String packageName, String connectionId) {
+            call(() -> {
+                if (packageName == null || !packageName.matches("[A-Za-z0-9_.]{1,255}")) throw new IllegalArgumentException("Неверное приложение");
+                requireStore();
+                String id = connectionId == null ? "" : connectionId;
+                if (!id.isEmpty()) requireStore().get(id); // throws for an unknown id
+                if (id.equals(appConnections().getString(packageName, ""))) return null;
+                if (id.isEmpty()) appConnections().edit().remove(packageName).commit();
+                else appConnections().edit().putString(packageName, id).commit();
+                if (store.selected() != null) { cancelRestart(); stopCore(); retries=0; startSelected(); }
+                publish(); return null;
+            });
+        }
         @Override public void confirmIp() {
             call(() -> {
                 String pending = prefs().getString(PREF_IP_PENDING, "");
@@ -127,6 +146,8 @@ public class PocketVpnService extends VpnService {
                 cancelRestart(); stopCore(); retries=0; startSelected(); return null;
             });
         }
+        @Override public String diagnose() { return runDiagnostics(); }
+        @Override public void checkExitIp() { call(() -> { requestExit(generation, true); return null; }); }
         @Override public void checkNow() {
             call(() -> {
                 if (runningId == null || client == null) return null;
@@ -186,7 +207,9 @@ public class PocketVpnService extends VpnService {
                 synchronized (pings) {
                     for (java.util.Iterator<String> keys = measured.keys(); keys.hasNext();) {
                         String id = keys.next();
-                        pings.put(id, new long[]{measured.getLong(id), now});
+                        // A miss is not remembered: the next open checks that server again.
+                        if (measured.getLong(id) > 0) pings.put(id, new long[]{measured.getLong(id), now});
+                        else pings.remove(id);
                     }
                 }
                 return measured.toString();
@@ -308,6 +331,8 @@ public class PocketVpnService extends VpnService {
     }
 
     private static final String PREFS = "pocket_routing", PREF_DIRECT_RU = "direct_ru";
+    /** Apps with their own connection: package name -> connection id. */
+    private android.content.SharedPreferences appConnections() { return getSharedPreferences("pocket_apps", MODE_PRIVATE); }
     private List<String> russianNetworks;
 
     /** «Российские сайты напрямую»: on by default, as in Pocket Windows. */
@@ -359,7 +384,96 @@ public class PocketVpnService extends VpnService {
         connectionState = "IP_CHANGED"; error = ipChangedText(); publish();
     }
 
-    private String publicIp() throws Exception {
+
+    // ---- Exit address of the selected server and its references (IPLogs, FFraud), kept only on this device ----
+
+    private android.content.SharedPreferences exits() { return getSharedPreferences("pocket_exits", MODE_PRIVATE); }
+
+    private JSONObject lastExit(String id) {
+        try { return id.isEmpty() ? new JSONObject() : new JSONObject(exits().getString(id, "{}")); } catch (Exception e) { return new JSONObject(); }
+    }
+
+    /** One check through the tunnel: the address sites see, then its references. No session to any other server. */
+    private void requestExit(int ticket, boolean asked) {
+        if ("CHECKING".equals(exitStatus)) return;
+        ConnectionProfile selected = store == null ? null : store.selected();
+        if (selected == null || client == null) { if (asked) { exitStatus = "UNAVAILABLE"; publish(); } return; }
+        String id = selected.id;
+        exitStatus = "CHECKING"; publish();
+        network.execute(() -> {
+            String ip = null; JSONArray ratings = null;
+            try { ip = publicIp(); } catch (Exception ignored) { }
+            if (ip != null) ratings = rate(ip);
+            String seen = ip; JSONArray rated = ratings;
+            if (!closed) worker.execute(() -> {
+                if (ticket != generation) { exitStatus = ""; return; }
+                exitStatus = seen == null ? "UNAVAILABLE" : "OK";
+                if (seen != null) recordExit(id, seen, rated);
+                publish();
+            });
+        });
+    }
+
+    private void recordExit(String id, String ip, JSONArray ratings) {
+        try {
+            JSONObject value = lastExit(id);
+            JSONArray history = value.optJSONArray("history") == null ? new JSONArray() : value.getJSONArray("history");
+            long now = System.currentTimeMillis();
+            history.put(new JSONObject().put("ip", ip).put("time", now));
+            while (history.length() > 20) history.remove(0);
+            if (ratings == null || ratings.length() == 0) ratings = ip.equals(value.optString("ip")) ? value.optJSONArray("ratings") : null;
+            value.put("ip", ip).put("time", now).put("history", history).put("ratings", ratings == null ? new JSONArray() : ratings);
+            exits().edit().putString(id, value.toString()).apply();
+        } catch (JSONException ignored) { }
+    }
+
+    /** Step-by-step check for the «Диагностика» sheet; the report names no server, key or address of the server. */
+    private String runDiagnostics() {
+        JSONArray steps = new JSONArray();
+        StringBuilder report = new StringBuilder("Pocket " + net.typeblog.shelter.BuildConfig.VERSION_NAME + ", Android " + android.os.Build.VERSION.RELEASE + "\n");
+        // Core state belongs to the worker; only the checks below run on this thread.
+        Object[] snap = call(() -> new Object[]{store == null ? null : store.selected(), platform != null ? platform.getUnderlyingNetwork() : null, lastNetwork, connectionState});
+        ConnectionProfile selected = (ConnectionProfile) snap[0];
+        step(steps, report, "Рабочий профиль", ProtectionPolicy.isOwner(this), ProtectionPolicy.isOwner(this) ? "Pocket управляет профилем" : "Pocket не владелец профиля");
+        step(steps, report, "Системная защита", ProtectionPolicy.confirmed(this), ProtectionPolicy.confirmed(this) ? "Постоянный VPN с блокировкой включён" : "Постоянный VPN или блокировка не подтверждены");
+        step(steps, report, "Подключение выбрано", selected != null, selected == null ? "Выбери подключение в разделе Прокси" : selected.typeLabel() + (selected.type.equals("vless") ? " через Xray" : " через sing-box"));
+        Network physical = (Network) snap[1];
+        if (physical == null) physical = (Network) snap[2];
+        step(steps, report, "Сеть телефона", physical != null, physical != null ? "Есть" : "Нет доступной сети");
+        Boolean dns = null; String dnsText = "Не проверено";
+        if (selected != null && physical != null) {
+            try { dns = physical.getAllByName(selected.server).length > 0; dnsText = dns ? "Адрес сервера найден" : "Адрес сервера не найден"; }
+            catch (Exception e) { dns = false; dnsText = "Адрес сервера не найден"; }
+        }
+        step(steps, report, "DNS сервера", dns, dnsText);
+        Boolean reach = null; String reachText = "Не проверено";
+        if (selected != null && physical != null && Boolean.TRUE.equals(dns) && !selected.type.equals("hysteria2")) {
+            try (java.net.Socket socket = new java.net.Socket()) {
+                physical.bindSocket(socket);
+                socket.connect(new java.net.InetSocketAddress(firstIpv4(physical.getAllByName(selected.server)), selected.port), 5000);
+                reach = true; reachText = "Сервер принимает соединения";
+            } catch (Exception e) { reach = false; reachText = "Сервер не принимает соединения"; }
+        } else if (selected != null && selected.type.equals("hysteria2")) reachText = "Hysteria2 работает по UDP, проверяется туннелем";
+        step(steps, report, "Сервер", reach, reachText);
+        boolean tunnel = "CONNECTED".equals(snap[3]);
+        step(steps, report, "Туннель", tunnel, tunnel ? "Связь проверена" : (error.isEmpty() ? "Нет связи с сервером" : error));
+        Boolean exit = null; String exitText = "Не проверено";
+        if (tunnel) {
+            String ip = null;
+            try { ip = publicIp(); } catch (Exception ignored) { }
+            exit = ip != null; exitText = ip != null ? "Сайты видят адрес выхода прокси" : "Сервис проверки адреса недоступен";
+            if (ip != null && selected != null) recordExit(selected.id, ip, null);
+        }
+        step(steps, report, "Выход в интернет", exit, exitText);
+        try { return new JSONObject().put("steps", steps).put("report", report.toString()).toString(); }
+        catch (JSONException e) { return "{\"steps\":[],\"report\":\"\"}"; }
+    }
+
+    private static void step(JSONArray steps, StringBuilder report, String title, Boolean ok, String detail) {
+        try { steps.put(new JSONObject().put("title", title).put("ok", ok == null ? JSONObject.NULL : ok).put("detail", detail)); } catch (JSONException ignored) { }
+        report.append(ok == null ? "[—] " : ok ? "[да] " : "[нет] ").append(title).append(": ").append(detail).append('\n');
+    }
+    private Network ownTunnel() {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
         Network tunnel = null;
         for (Network network : cm.getAllNetworks()) {
@@ -368,6 +482,34 @@ public class PocketVpnService extends VpnService {
             // Android 10 does not tell the owner; in the work profile the only VPN is Pocket's, which is then the active network.
             if (android.os.Build.VERSION.SDK_INT >= 30 ? caps.getOwnerUid() == Process.myUid() : network.equals(cm.getActiveNetwork())) tunnel = network;
         }
+        return tunnel;
+    }
+
+    /**
+     * Reference ratings of an exit address. IPLogs (no key, owner allowed it to see the checked address) is
+     * asked through the tunnel with only that address. FFraud is not included: no public service under that name was found.
+     */
+    private JSONArray rate(String ip) {
+        JSONArray result = new JSONArray();
+        try {
+            Network tunnel = ownTunnel();
+            if (tunnel == null) return result;
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) tunnel.openConnection(new java.net.URL("https://iplogs.com/v1/check/" + ip));
+            connection.setConnectTimeout(10000); connection.setReadTimeout(30000); connection.setUseCaches(false);
+            connection.setRequestProperty("Accept", "application/json");
+            try (java.io.InputStream in = connection.getInputStream()) {
+                java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[4096];
+                for (int n; body.size() < 262144 && (n = in.read(buffer)) > 0;) body.write(buffer, 0, n);
+                JSONObject value = new JSONObject(body.toString("UTF-8"));
+                result.put(IpRating.fromIpLogs(value, ip));
+            } finally { connection.disconnect(); }
+        } catch (Exception e) { android.util.Log.w("PocketVPN", "IP rating unavailable: " + e.getClass().getSimpleName()); }
+        return result;
+    }
+
+    private String publicIp() throws Exception {
+        Network tunnel = ownTunnel();
         if (tunnel == null) return null;
         java.net.HttpURLConnection connection = (java.net.HttpURLConnection) tunnel.openConnection(new java.net.URL("https://api.ipify.org"));
         connection.setConnectTimeout(8000); connection.setReadTimeout(8000); connection.setUseCaches(false);
@@ -498,9 +640,46 @@ public class PocketVpnService extends VpnService {
             if (addresses.length == 0) throw new IllegalStateException("Server DNS unavailable");
             String resolved = addresses[Math.floorMod(addressCursor++,addresses.length)].getHostAddress();
             JSONObject carrier = null;
-            if (selected.type.equals("vless")) {
+            Network network = lastNetwork;
+            // Apps with their own connection (see PocketConfig.AppRoute); a deleted connection returns its apps to the default.
+            java.util.Map<String, List<String>> byId = new java.util.LinkedHashMap<>();
+            for (java.util.Map.Entry<String, ?> entry : appConnections().getAll().entrySet()) {
+                String id = String.valueOf(entry.getValue());
+                if (id.equals(selected.id)) continue;
+                try { store.get(id); } catch (IllegalArgumentException gone) { appConnections().edit().remove(entry.getKey()).apply(); continue; }
+                byId.computeIfAbsent(id, k -> new java.util.ArrayList<>()).add(entry.getKey());
+            }
+            List<ConnectionProfile> extra = new java.util.ArrayList<>();
+            for (String id : byId.keySet()) extra.add(store.get(id));
+            JSONObject[] appOutbounds = new JSONObject[extra.size()];
+            boolean appVless = false;
+            for (int i = 0; i < extra.size(); i++) {
+                ConnectionProfile app = extra.get(i);
+                if (app.type.equals("vless")) { appVless = true; continue; }
+                try { appOutbounds[i] = app.toOutbound().put("server", firstIpv4(network.getAllByName(app.server))).put("tag", "app-" + i); }
+                catch (Exception e) { android.util.Log.w("PocketVPN", "App connection unavailable: " + e.getClass().getSimpleName()); }
+            }
+            if (appVless) {
+                // One Xray carries every VLESS server, the selected one's and the apps' (see XrayConfig.createMany).
+                JSONArray[] chains = new JSONArray[extra.size() + 1];
+                int[] ports = new int[chains.length];
+                if (selected.type.equals("vless")) chains[0] = XrayConfig.outbounds(selected);
+                for (int i = 0; i < extra.size(); i++) if (extra.get(i).type.equals("vless")) chains[i + 1] = XrayConfig.outbounds(extra.get(i));
+                XrayConfig.pickPorts(chains, ports);
+                String user = UUID.randomUUID().toString(), password = UUID.randomUUID().toString();
+                List<Integer> kept = new java.util.ArrayList<>();
+                String xray = XrayConfig.createMany(chains, host -> host.equals(selected.server) ? resolved : firstIpv4(network.getAllByName(host)),
+                        ports, user, password, kept);
+                if (chains[0] != null && !kept.contains(0)) throw new IllegalStateException("Server DNS unavailable");
+                if (!kept.isEmpty()) {
+                    io.nekohasekai.pocketxray.Pocketxray.setProtector(fd -> protect(fd));
+                    xrayRunning = true;
+                    io.nekohasekai.pocketxray.Pocketxray.start(xray);
+                }
+                if (chains[0] != null) carrier = XrayConfig.socksOutbound(ports[0], user, password);
+                for (int i = 0; i < extra.size(); i++) if (kept.contains(i + 1)) appOutbounds[i] = XrayConfig.socksOutbound(ports[i + 1], user, password).put("tag", "app-" + i);
+            } else if (selected.type.equals("vless")) {
                 // VLESS is carried by Xray (see XrayConfig); its sockets leave the tunnel as the core's do.
-                Network network = lastNetwork;
                 String user = UUID.randomUUID().toString(), password = UUID.randomUUID().toString();
                 int port;
                 try (java.net.ServerSocket probe = new java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { port = probe.getLocalPort(); }
@@ -511,7 +690,9 @@ public class PocketVpnService extends VpnService {
                 io.nekohasekai.pocketxray.Pocketxray.start(xray);
                 carrier = XrayConfig.socksOutbound(port, user, password);
             }
-            String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier);
+            List<PocketConfig.AppRoute> apps = new java.util.ArrayList<>();
+            for (int i = 0; i < extra.size(); i++) apps.add(new PocketConfig.AppRoute(byId.get(extra.get(i).id), appOutbounds[i], extra.get(i)));
+            String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier, apps);
             Libbox.checkConfig(configuration);
             server = Libbox.newCommandServer(serverHandler(), platform);
             server.start();
@@ -519,6 +700,8 @@ public class PocketVpnService extends VpnService {
             runningId = selected.id;
             CommandClientOptions options = new CommandClientOptions();
             options.addCommand(Libbox.CommandOutbounds);
+            options.addCommand(Libbox.CommandStatus);
+            options.setStatusInterval(2_000_000_000L);
             client = Libbox.newCommandClient(clientHandler(ticket), options);
             client.connect();
             retries=0; probeFailures=0;
@@ -569,10 +752,14 @@ public class PocketVpnService extends VpnService {
                     OutboundGroupItem item=values.next();
                     if (!"proxy".equals(item.getTag())) continue;
                     final long time=item.getURLTestTime();
+                    if(item.getURLTestDelay()>0) selectedPing=item.getURLTestDelay();
                     if (!closed) worker.execute(() -> {
                         if(ticket!=generation) return;
                         if(health.observe(time,android.os.SystemClock.elapsedRealtime())){
-                            lastCheckTime=time*1000; connectionState="CONNECTED"; error=""; probeFailures=0; publish();
+                            boolean first=!"CONNECTED".equals(connectionState) && sessionStart==0;
+                            lastCheckTime=time*1000; connectionState="CONNECTED"; error=""; probeFailures=0;
+                            if(first){ sessionStart=System.currentTimeMillis(); requestExit(ticket,false); }
+                            publish();
                         }
                     });
                 }
@@ -584,7 +771,11 @@ public class PocketVpnService extends VpnService {
             @Override public void writeConnectionEvents(ConnectionEvents events) {}
             @Override public void writeGroups(OutboundGroupIterator groups) {}
             @Override public void writeLogs(LogIterator logs) {}
-            @Override public void writeStatus(StatusMessage status) {}
+            @Override public void writeStatus(StatusMessage status) {
+                if(ticket!=generation||!status.getTrafficAvailable()) return;
+                // Read on demand by getPocketState; not published, so the notification is not redrawn every two seconds.
+                uplink=status.getUplink(); downlink=status.getDownlink(); uplinkTotal=status.getUplinkTotal(); downlinkTotal=status.getDownlinkTotal();
+            }
         };
     }
 
@@ -616,6 +807,7 @@ public class PocketVpnService extends VpnService {
         if(probeDeadline!=null){probeDeadline.cancel(false);probeDeadline=null;}
         health=new ProbeHealth(); lastCheckTime=0; runningId=null;
         if(ipTask!=null){ipTask.cancel(false);ipTask=null;}
+        uplink=downlink=uplinkTotal=downlinkTotal=sessionStart=selectedPing=0; exitStatus="";
         if(xrayRunning){ xrayRunning=false; try{io.nekohasekai.pocketxray.Pocketxray.stop();}catch(Exception ignored){} }
         CommandClient oldClient=client; client=null;
         if(oldClient!=null) try{oldClient.disconnect();}catch(Exception ignored){}
@@ -636,6 +828,12 @@ public class PocketVpnService extends VpnService {
             if("CONNECTED".equals(state.optString("connectionState")) && (checked<0 || now<checked || now-checked>75000)) {
                 state.put("connectionState","RECONNECTING"); state.put("error","Ожидаем свежую проверку связи");
             }
+            state.put("appConnections",new JSONObject(appConnections().getAll()));
+            state.put("uplink",uplink).put("downlink",downlink).put("uplinkTotal",uplinkTotal).put("downlinkTotal",downlinkTotal)
+                    .put("sessionStart",sessionStart).put("selectedPing",selectedPing).put("exitStatus",exitStatus);
+            // The last exit observed for the selected server, kept locally with its time.
+            JSONObject exit=lastExit(state.optString("selectedId"));
+            state.put("exitIp",exit.optString("ip")).put("exitIpTime",exit.optLong("time")).put("ratings",exit.optJSONArray("ratings")==null?new JSONArray():exit.getJSONArray("ratings"));
             return state.toString();
         } catch(Exception e){ return "{\"policyState\":\"UNCONFIRMED\",\"connectionState\":\"ERROR\"}"; }
     }

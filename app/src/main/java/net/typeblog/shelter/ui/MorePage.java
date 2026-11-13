@@ -59,6 +59,8 @@ final class MorePage extends Page {
         intervalRow.setOnClickListener(v -> askInterval());
 
         LinearLayout help = group();
+        row(help, R.drawable.ic_warning, R.color.orange, "Диагностика подключения", "Пошаговая проверка и отчёт")
+                .setOnClickListener(v -> new HomePage.DiagnosticsPage(a).showAsSheet());
         row(help, R.drawable.ic_chat, R.color.accent, "Тех. поддержка", "Ответим в Telegram")
                 .setOnClickListener(v -> a.openUrl(ShopCatalog.supportUrl()));
         row(help, R.drawable.ic_info, R.color.violet, "О Pocket", "Версия, лицензии")

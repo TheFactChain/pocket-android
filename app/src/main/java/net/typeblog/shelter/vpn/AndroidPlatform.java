@@ -322,8 +322,19 @@ public final class AndroidPlatform implements PlatformInterface, AutoCloseable {
     @Override public BridgeSession createBridge(BridgeOptions options) { throw unsupported(); }
     @Override public ShellSession openShellSession(PlatformUser user, String command, StringIterator environ,
             String term, int rows, int cols) { throw unsupported(); }
+    /** Which app opened a connection, for per-app connections (route rules by package). */
     @Override public ConnectionOwner findConnectionOwner(int protocol, String source, int sourcePort,
-            String destination, int destinationPort) { throw unsupported(); }
+            String destination, int destinationPort) throws Exception {
+        if (service == null) throw unsupported();
+        int uid = connectivity.getConnectionOwnerUid(protocol, new java.net.InetSocketAddress(source, sourcePort),
+                new java.net.InetSocketAddress(destination, destinationPort));
+        if (uid == android.os.Process.INVALID_UID) throw new IllegalStateException("Connection owner not found");
+        ConnectionOwner owner = new ConnectionOwner();
+        owner.setUserId(uid);
+        String[] packages = service.getPackageManager().getPackagesForUid(uid);
+        if (packages != null) owner.setAndroidPackageNames(strings(java.util.Arrays.asList(packages)));
+        return owner;
+    }
     @Override public void sendNotification(io.nekohasekai.libbox.Notification notification) { throw unsupported(); }
     @Override public void cancelNotification(String identifier, int typeID) { throw unsupported(); }
     @Override public void startNeighborMonitor(NeighborUpdateListener listener) { throw unsupported(); }

@@ -41,15 +41,15 @@ final class HomePage extends Page {
     private GradientDrawable proxyFill, updatesFill;
     private int proxyColor;
     private PocketStatus status;
-    private TextView metricsText, metricsCheck;
-    private final MetricsPage metrics;
+
+
 
     HomePage(MainActivity activity) {
         super(activity);
         apps = new AppsPage(activity);
         shop = new ShopPage(activity);
         settings = new MorePage(activity);
-        metrics = new MetricsPage(activity);
+
     }
 
     @Override View create(LayoutInflater inflater) {
@@ -94,33 +94,11 @@ final class HomePage extends Page {
         });
 
         tappable(root.findViewById(R.id.home_settings), settings::showAsSheet);
-        addMetricsCard((LinearLayout) root);
+
         apps.bind(root.findViewById(R.id.card_apps));
         return root;
     }
 
-    /** Compact indicators card between the shop and the apps; tap opens the full list, «Диагностика» runs the check. */
-    private void addMetricsCard(LinearLayout root) {
-        LinearLayout card = new LinearLayout(a);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundResource(R.drawable.bg_card);
-        card.setPadding(a.dp(18), a.dp(12), a.dp(12), a.dp(4));
-        metricsText = new TextView(a);
-        metricsText.setTextColor(a.color(R.color.ink));
-        metricsText.setTextSize(14f);
-        metricsText.setLineSpacing(a.dp(2), 1f);
-        card.addView(metricsText, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout actions = new LinearLayout(a);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        metricsCheck = textAction("Проверить IP", v -> checkExitIp(a));
-        actions.addView(metricsCheck);
-        actions.addView(textAction("Диагностика", v -> new DiagnosticsPage(a).showAsSheet()));
-        card.addView(actions, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = a.dp(10);
-        root.addView(card, root.getChildCount() - 1, lp); // before the apps card, which keeps the remaining height
-        tappable(card, metrics::showAsSheet);
-    }
 
     static void checkExitIp(MainActivity a) {
         a.remote(() -> { a.mServiceWork.checkExitIp(); return null; },
@@ -140,6 +118,18 @@ final class HomePage extends Page {
         return "CHECKING".equals(st) ? "проверяем…" : "UNAVAILABLE".equals(st) ? "сервис проверки недоступен" : "не проверен";
     }
 
+    /** «IP чистый», «IP похож на VPN»… from the first rating; without one, whether the exit is known. */
+    static String exitVerdict(JSONObject s) {
+        JSONArray list = s == null ? null : s.optJSONArray("ratings");
+        JSONObject r = list == null || list.length() == 0 ? null : list.optJSONObject(0);
+        String risk = r == null ? "" : r.optString("risk");
+        if (risk.equals("low")) return "IP чистый";
+        if (risk.equals("medium")) return "IP под подозрением";
+        if (risk.equals("high")) return "IP похож на VPN";
+        if (s != null && "CHECKING".equals(s.optString("exitStatus"))) return "Проверяем IP…";
+        return s != null && !s.optString("exitIp").isEmpty() ? "IP без оценки" : "IP не проверен";
+    }
+
     static String pingText(JSONObject s) {
         long ping = s == null ? 0 : s.optLong("selectedPing");
         return ping > 0 ? ping + " мс" : ping < 0 ? "нет ответа" : "не проверен";
@@ -155,8 +145,7 @@ final class HomePage extends Page {
 
     static String trafficText(JSONObject s) {
         if (s == null || !s.has("uplinkTotal") && !s.has("downlinkTotal")) return "—";
-        return "отдано " + size(s.optLong("uplinkTotal")) + " (" + rate(s.optLong("uplink")) + "), получено "
-                + size(s.optLong("downlinkTotal")) + " (" + rate(s.optLong("downlink")) + ")";
+        return "получено " + size(s.optLong("downlinkTotal")) + ", отправлено " + size(s.optLong("uplinkTotal"));
     }
 
     /** Remaining traffic and days of the subscription the selected server belongs to; «—» when it has none. */
@@ -187,13 +176,6 @@ final class HomePage extends Page {
         return "—";
     }
 
-    private void showMetrics() {
-        JSONObject s = a.state;
-        String server = s == null || s.optString("selectedName").isEmpty() ? "Сервер не выбран" : s.optString("selectedName");
-        metricsText.setText(server + ", пинг: " + pingText(s) + "\nВнешний IP (выход): " + exitValue(s) + "\nТрафик: " + trafficText(s));
-        metricsCheck.setVisibility(s != null && s.optString("exitIp").isEmpty() ? View.VISIBLE : View.GONE);
-        if (metrics.showing()) metrics.onState();
-    }
 
     /** Full list of indicators with the ratings (reference only). */
     static final class MetricsPage extends Page {
@@ -214,10 +196,7 @@ final class HomePage extends Page {
             sub = row(g, R.drawable.ic_key, R.color.violet, "Подписка", null);
             last = row(g, R.drawable.ic_check, R.color.green, "Последняя проверка", null);
             ratings = group();
-            LinearLayout d = group();
-            row(d, R.drawable.ic_warning, R.color.orange, "Диагностика подключения", "Пошаговая проверка и отчёт")
-                    .setOnClickListener(v -> new DiagnosticsPage(a).showAsSheet());
-            caption(content, "Рейтинги IP справочные: это мнение сторонних сервисов, не гарантия.");
+            caption(content, "Оценку IP дают сторонние сервисы, это не гарантия. Диагностика — в настройках.");
         }
 
         @Override void onState() {
@@ -234,11 +213,11 @@ final class HomePage extends Page {
             last.setCaption(t > 0 ? time(t) : "не проверено");
             ratings.removeAllViews();
             JSONArray list = s == null ? null : s.optJSONArray("ratings");
-            if (list == null || list.length() == 0) { row(ratings, R.drawable.ic_info, R.color.accent, "Рейтинги IP", "Нет данных (справочно)"); return; }
+            if (list == null || list.length() == 0) { row(ratings, R.drawable.ic_shield, R.color.accent, "Оценка IP", "Появится после проверки IP"); return; }
             for (int i = 0; i < list.length(); i++) {
                 JSONObject r = list.optJSONObject(i);
                 if (r == null) continue;
-                RowView row = row(ratings, R.drawable.ic_info, R.color.accent, r.optString("source", "Рейтинг") + " (справочно)", r.optString("summary", "—"));
+                RowView row = row(ratings, R.drawable.ic_shield, R.color.accent, "Оценка IP · " + r.optString("source", "сервис"), r.optString("summary", "—"));
                 String risk = r.optString("risk");
                 boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
                 row.setPill(low ? "низкий" : mid ? "средний" : high ? "высокий" : "н/д",
@@ -376,6 +355,6 @@ final class HomePage extends Page {
                 : a.updateLatest ? "Последняя версия" : "Нажми, чтобы проверить");
         updatesFill.setColor(a.color(offered ? R.color.pastel_green : R.color.pastel_blue));
         apps.setStatus(status);
-        showMetrics();
+
     }
 }

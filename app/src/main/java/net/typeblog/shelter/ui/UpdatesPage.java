@@ -62,7 +62,6 @@ final class UpdatesPage extends Page {
         pp.bottomMargin = a.dp(14);
         content.addView(progress, pp);
         action = pill(content, R.style.Pill, R.drawable.bg_pill_accent, "Проверить", v -> onAction());
-        caption(content, "Обновление принимается, только если подписано тем же ключом, что установленный Pocket. Копии и подключения сохраняются.");
         if (a.updateOffer != null) offer(a.updateOffer); else check();
     }
 

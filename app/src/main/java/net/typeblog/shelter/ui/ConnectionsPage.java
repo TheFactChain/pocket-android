@@ -48,7 +48,7 @@ final class ConnectionsPage extends Page {
     private ConnectionProfile pendingExport;
     private boolean pendingSecrets;
 
-    ConnectionsPage(MainActivity activity) { super(activity); }
+    ConnectionsPage(MainActivity activity) { super(activity); metricsPage = new HomePage.MetricsPage(activity); }
 
     @Override String title() { return "Прокси"; }
 
@@ -65,6 +65,18 @@ final class ConnectionsPage extends Page {
         buyPrice = buy.setPill(proxyPrice(), a.color(R.color.ink), 0xFFFFFFFF);
         buyPrice.setContentDescription("Цена: " + buyPrice.getText());
         buy.setOnClickListener(v -> a.openUrl(ShopCatalog.buyProxyUrl()));
+        // The screen's one primary action: check every server at once; the line beside it says what happened.
+        LinearLayout check = new LinearLayout(a);
+        check.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        check.setPadding(a.dp(4), 0, 0, 0);
+        checkStatus = new TextView(a);
+        checkStatus.setTextAppearance(R.style.Caption);
+        check.addView(checkStatus, new LinearLayout.LayoutParams(0, -2, 1));
+        checkButton = pill(null, R.style.Pill, R.drawable.bg_pill_accent, "Проверить пинг", v -> pingAll());
+        check.addView(checkButton, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(-1, -2);
+        checkParams.bottomMargin = a.dp(16);
+        content.addView(check, checkParams);
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         content.addView(list, new LinearLayout.LayoutParams(-1, -2));
@@ -100,28 +112,37 @@ final class ConnectionsPage extends Page {
         return top;
     }
 
-    /** «Проверить пинг» for a group; disabled and relabelled while the check runs. */
-    private TextView pingAction(String group, String idle) {
-        boolean busy = pinging.contains(group);
-        TextView action = textAction(busy ? "Проверяем…" : idle, v -> ping(group, true));
-        action.setEnabled(!busy);
-        action.setAlpha(busy ? 0.5f : 1f);
-        action.setContentDescription(busy ? "Пинг проверяется" : "Проверить пинг серверов");
-        return action;
+    private TextView checkStatus, checkButton;
+    /** IP, traffic and the exit rating of the server in use; opened by a tap on it. */
+    private final HomePage.MetricsPage metricsPage;
+
+    /** Checks every group: own proxies first, then each subscription; the worker runs them one after another. */
+    private void pingAll() {
+        ping("", true);
+        for (int i = 0; i < a.subscriptionList.length(); i++) {
+            JSONObject sub = a.subscriptionList.optJSONObject(i);
+            if (sub != null) ping(sub.optString("id"), true);
+        }
     }
 
-    /** One line under the header: is a check running, when was the last one, how many answered. */
-    private void pingCaption(LinearLayout parent, String group, java.util.List<String> ids) {
-        String text;
-        if (pinging.contains(group)) text = "Проверяем пинг…";
-        else if (!lastPing.containsKey(group)) text = "Пинг ещё не проверялся";
-        else {
-            int ok = 0;
-            for (String id : ids) { Long ms = pings.get(id); if (ms != null && ms > 0) ok++; }
-            text = "Пинг: " + ok + " из " + ids.size() + " ответили · "
-                    + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(new java.util.Date(lastPing.get(group)));
+    /** The line beside «Проверить пинг»: running, or how many of all servers answered and when. */
+    private void updateCheckBar() {
+        if (checkStatus == null) return;
+        boolean busy = !pinging.isEmpty();
+        checkButton.setEnabled(!busy);
+        checkButton.setAlpha(busy ? 0.5f : 1f);
+        checkButton.setText(busy ? "Проверяем…" : "Проверить пинг");
+        int total = a.connectionList.length(), ok = 0;
+        long last = 0;
+        for (int i = 0; i < total; i++) {
+            JSONObject item = a.connectionList.optJSONObject(i);
+            Long ms = item == null ? null : pings.get(item.optString("id"));
+            if (ms != null && ms > 0) ok++;
         }
-        small(parent, text, R.color.muted).setPadding(a.dp(16), a.dp(2), a.dp(16), a.dp(8));
+        for (long time : lastPing.values()) last = Math.max(last, time);
+        if (busy) checkStatus.setText("Проверяем серверы, это до 10 секунд");
+        else if (last == 0) checkStatus.setText(total == 0 ? "Добавь подключение, чтобы проверить пинг" : "Пинг ещё не проверялся");
+        else checkStatus.setText("Отвечают " + ok + " из " + total + " · " + HomePage.time(last));
     }
 
     private android.content.SharedPreferences uiPrefs() { return a.getSharedPreferences("pocket_ui", android.content.Context.MODE_PRIVATE); }
@@ -149,8 +170,10 @@ final class ConnectionsPage extends Page {
 
     @Override void onState() {
         view();
-        String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId"));
+        // The rating and ping of the server in use arrive with the state, so they count as a change too.
+        String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId") + HomePage.exitVerdict(a.state));
         if (!json.equals(shownList)) { shownList = json; renderList(); }
+        if (metricsPage.showing()) metricsPage.onState();
         if (a.state == null) stateText.setText(a.linkProblem);
         else {
             String type = a.state.optString("selectedType");
@@ -175,12 +198,10 @@ final class ConnectionsPage extends Page {
             if (item != null && !known.contains(item.optString("subscription"))) manualIds.add(item.optString("id"));
         }
         int manual = manualIds.size();
+        updateCheckBar();
         LinearLayout card = card(list);
-        LinearLayout header = titleRow(card, "Мои прокси");
-        if (manual > 0) {
-            header.addView(pingAction("", "Проверить пинг"));
-            pingCaption(card, "", manualIds);
-        } else small(card, "Добавь купленный прокси или ссылку из подписки.", R.color.muted).setPadding(a.dp(16), a.dp(2), a.dp(16), a.dp(10));
+        titleRow(card, "Мои прокси").setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(6));
+        if (manual == 0) small(card, "Добавь купленный прокси или ссылку подписки.", R.color.muted).setPadding(a.dp(16), 0, a.dp(16), a.dp(10));
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null || known.contains(item.optString("subscription"))) continue;
@@ -188,19 +209,25 @@ final class ConnectionsPage extends Page {
             boolean isSelected = id.equals(selected);
             boolean editable = ConnectionProfile.UI_TYPES.contains(type);
             RowView row = serverRow(item, isSelected);
-            row.setCaption((isSelected ? "используется · " : "") + item.optString("details", type) + ", " + item.optString("server"));
-            LinearLayout end = new LinearLayout(a);
-            end.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            TextView pill = pingPill(id, "", isSelected);
-            if (pill != null) end.addView(pill);
-            end.addView(textAction(editable ? "Изменить" : "Удалить", v -> {
-                if (editable) edit(id); else confirmDelete(id, name, isSelected);
-            }));
-            row.setEnd(end);
-            separator(card);
+            row.setCaption(rowCaption(item.optString("details", type), isSelected));
+            row.setEnd(pingMark(id, "", isSelected));
+            // Editing is rare, so it lives behind a hold, like the apps grid; the tap stays «use this server».
+            row.setOnLongClickListener(v -> {
+                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+                java.util.List<String> labels = new java.util.ArrayList<>();
+                if (editable) labels.add("Изменить");
+                labels.add("Удалить");
+                new AlertDialog.Builder(a).setTitle(name)
+                        .setItems(labels.toArray(new String[0]), (d, which) -> {
+                            if (labels.get(which).equals("Изменить")) edit(id); else confirmDelete(id, name, isSelected);
+                        }).setNegativeButton("Закрыть", null).show();
+                return true;
+            });
             card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
         addRow(card, "Добавить подписку или подключение").setOnClickListener(v -> showAdd());
+        if (manual > 0) small(card, "Нажми, чтобы выбрать. Удерживай, чтобы изменить или удалить.", R.color.muted)
+                .setPadding(a.dp(16), a.dp(4), a.dp(16), a.dp(14));
         // Checks start after this pass: ping() redraws the list itself.
         if (manual > 0 && !pinged.contains("")) a.post(() -> ping("", false));
         for (int i = 0; i < a.subscriptionList.length(); i++) {
@@ -213,12 +240,11 @@ final class ConnectionsPage extends Page {
     private RowView serverRow(JSONObject item, boolean isSelected) {
         String id = item.optString("id"), name = item.optString("name");
         RowView row = new RowView(a);
-        if (isSelected) row.setIcon(R.drawable.ic_check, a.color(R.color.accent), 0xFFFFFFFF);
-        else row.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
+        row.setRadio(isSelected);
         row.setTitle(name).setTitleBold(isSelected);
         row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
         row.setOnClickListener(v -> {
-            if (isSelected) return;
+            if (isSelected) { metricsPage.showAsSheet(); metricsPage.onState(); return; }
             String current = a.state == null ? "?" : a.state.optString("selectedId");
             if (current.isEmpty()) { use(id, name); return; }
             // Changing the server changes the external address, so it is never done on one tap.
@@ -273,104 +299,74 @@ final class ConnectionsPage extends Page {
             if (item != null && subId.equals(item.optString("subscription"))) ids.add(item.optString("id"));
         }
 
-        // Header: the whole top line folds the card; the label says what a tap does.
+        // Header: the name folds the card; «Ещё» holds the rare actions (update, provider links, delete).
         LinearLayout top = titleRow(card, title);
-        TextView fold = textAction(folded ? "Показать " + ids.size() + " " + (ids.size() % 10 == 1 && ids.size() % 100 != 11 ? "сервер"
-                : ids.size() % 10 >= 2 && ids.size() % 10 <= 4 && (ids.size() % 100 < 12 || ids.size() % 100 > 14) ? "сервера" : "серверов") : "Свернуть",
-                v -> setCollapsed(subId, !folded));
-        fold.setContentDescription(title + (folded ? ", свёрнута, показать серверы" : ", свернуть список серверов"));
-        top.addView(fold);
+        top.setPadding(a.dp(16), a.dp(14), a.dp(8), 0);
         top.setOnClickListener(v -> setCollapsed(subId, !folded));
+        top.setContentDescription(title + (folded ? ", свёрнута" : ""));
+        TextView more = textAction("Ещё", v -> subscriptionMenu(sub, folded));
+        more.setContentDescription("Действия с подпиской «" + title + "»");
+        top.addView(more);
         LinearLayout header = new LinearLayout(a);
         header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(a.dp(16), 0, a.dp(8), a.dp(6));
+        header.setPadding(a.dp(16), 0, a.dp(16), a.dp(8));
         card.addView(header);
 
-        long updated = sub.optLong("updated");
-        String meta = (updated > 0 ? "Обновлено " + new java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.ROOT).format(new java.util.Date(updated)) : "Ещё не обновлялась")
-                + " · авто каждые " + sub.optInt("intervalHours", 12) + " ч";
-        small(header, meta, R.color.muted);
+        // One line people check first: traffic, expiry, freshness.
+        long used = sub.optLong("upload") + sub.optLong("download"), total = sub.optLong("total"), expire = sub.optLong("expire");
+        long updated = sub.optLong("updated"), left = expire * 1000 - System.currentTimeMillis();
+        StringBuilder meta = new StringBuilder();
+        if (used > 0 || total > 0) meta.append(bytes(used)).append(" из ").append(total > 0 ? bytes(total) : "∞");
+        if (expire > 0) meta.append(meta.length() > 0 ? " · " : "").append(left <= 0 ? "истекла " : "до ")
+                .append(new java.text.SimpleDateFormat("dd.MM", java.util.Locale.ROOT).format(new java.util.Date(expire * 1000)));
+        meta.append(meta.length() > 0 ? " · " : "").append(refreshing.contains(subId) ? "обновляем…"
+                : updated > 0 ? "обновлено " + HomePage.time(updated) : "ещё не обновлялась");
+        small(header, meta.toString(), expire > 0 && left <= 0 ? R.color.danger : expire > 0 && left < 3 * 86_400_000L ? R.color.orange_ink : R.color.muted);
+        if (total > 0) {
+            android.widget.ProgressBar bar = new android.widget.ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(1000);
+            bar.setProgress((int) Math.min(1000, used * 1000 / total));
+            bar.setProgressTintList(ColorStateList.valueOf(a.color(used >= total ? R.color.danger : R.color.green)));
+            bar.setContentDescription("Использовано " + bytes(used) + " из " + bytes(total));
+            LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, a.dp(4));
+            barParams.topMargin = a.dp(6);
+            header.addView(bar, barParams);
+        }
         String error = sub.optString("error");
         if (error.startsWith(Subscription.NEEDS_DEVICE)) {
             TextView ask = small(header, error + " Нажми, чтобы разрешить.", R.color.danger);
             ask.setOnClickListener(v -> askDevice(title, () -> refreshSubscription(subId, title, true)));
         } else if (!error.isEmpty()) small(header, "Не обновилась: " + error + " Работают прежние серверы.", R.color.danger);
-
-        // Traffic and expiry, the two numbers people check first.
-        long used = sub.optLong("upload") + sub.optLong("download"), total = sub.optLong("total"), expire = sub.optLong("expire");
-        if (used > 0 || total > 0 || expire > 0) {
-            LinearLayout usage = new LinearLayout(a);
-            usage.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            usage.setPadding(0, a.dp(8), a.dp(8), 0);
-            header.addView(usage);
-            TextView traffic = new TextView(a);
-            traffic.setTextAppearance(R.style.Caption);
-            traffic.setTextColor(a.color(R.color.ink));
-            traffic.setText("Трафик: " + bytes(used) + " / " + (total > 0 ? bytes(total) : "∞"));
-            usage.addView(traffic, new LinearLayout.LayoutParams(0, -2, 1));
-            if (expire > 0) {
-                long left = expire * 1000 - System.currentTimeMillis();
-                TextView until = new TextView(a);
-                until.setTextAppearance(R.style.Caption);
-                String date = new java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.ROOT).format(new java.util.Date(expire * 1000));
-                until.setText(left <= 0 ? "Истекла " + date : "Истекает " + date);
-                until.setTextColor(a.color(left <= 0 ? R.color.danger : left < 3 * 86_400_000L ? R.color.orange_ink : R.color.ink));
-                usage.addView(until);
-            }
-            if (total > 0) {
-                android.widget.ProgressBar bar = new android.widget.ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
-                bar.setMax(1000);
-                bar.setProgress((int) Math.min(1000, used * 1000 / total));
-                bar.setProgressTintList(ColorStateList.valueOf(a.color(used >= total ? R.color.danger : R.color.green)));
-                bar.setContentDescription("Использовано " + bytes(used) + " из " + bytes(total));
-                LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(-1, a.dp(6));
-                barParams.topMargin = a.dp(6);
-                barParams.setMarginEnd(a.dp(8));
-                header.addView(bar, barParams);
-            }
-        }
         if (!sub.optString("announce").isEmpty()) {
             TextView announce = small(header, sub.optString("announce"), R.color.ink);
-            announce.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
-            announce.setBackgroundResource(R.drawable.bg_capsule);
-            announce.setBackgroundTintList(ColorStateList.valueOf(a.color(R.color.blue_soft)));
-            ((LinearLayout.LayoutParams) announce.getLayoutParams()).topMargin = a.dp(8);
+            announce.setMaxLines(3);
+            announce.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            ((LinearLayout.LayoutParams) announce.getLayoutParams()).topMargin = a.dp(6);
         }
-        // Actions, then the one-line ping status.
-        LinearLayout actions = new LinearLayout(a);
-        actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, a.dp(4), 0, 0);
-        boolean busy = refreshing.contains(subId);
-        TextView refresh = textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title, false));
-        refresh.setEnabled(!busy);
-        refresh.setAlpha(busy ? 0.5f : 1f);
-        refresh.setContentDescription(busy ? "Подписка обновляется" : "Обновить подписку");
-        actions.addView(refresh);
-        actions.addView(pingAction(subId, "Проверить пинг"));
-        TextView more = textAction("Ещё", v -> subscriptionMenu(sub));
-        more.setContentDescription("Ещё: поддержка, сайт, удалить подписку");
-        actions.addView(more);
-        header.addView(actions);
-        pingCaption(card, subId, ids);
 
         int count = ids.size();
         if (folded) {
+            String used0 = "";
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.optJSONObject(i);
-                if (item != null && subId.equals(item.optString("subscription")) && item.optString("id").equals(selected))
-                    small(card, "Используется «" + item.optString("name") + "»", R.color.ink).setPadding(a.dp(16), 0, a.dp(16), a.dp(12));
+                if (item != null && subId.equals(item.optString("subscription")) && item.optString("id").equals(selected)) used0 = item.optString("name");
             }
+            addRow(card, "Показать " + count + " " + servers(count) + (used0.isEmpty() ? "" : " · выбран «" + used0 + "»"))
+                    .setOnClickListener(v -> setCollapsed(subId, false));
             return;
         }
+        // Fastest first once checked; servers without an answer go last. The order is stable otherwise.
+        java.util.List<JSONObject> rows = new java.util.ArrayList<>();
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
-            if (item == null || !subId.equals(item.optString("subscription"))) continue;
+            if (item != null && subId.equals(item.optString("subscription"))) rows.add(item);
+        }
+        java.util.Collections.sort(rows, (x, y) -> Long.compare(rank(x.optString("id")), rank(y.optString("id"))));
+        for (JSONObject item : rows) {
             boolean isSelected = item.optString("id").equals(selected);
             RowView row = serverRow(item, isSelected);
-            row.setCaption((isSelected ? "используется · " : "") + item.optString("details"));
-            TextView pill = pingPill(item.optString("id"), subId, isSelected);
-            if (pill != null) row.setEnd(pill);
-            separator(card);
+            row.setCaption(rowCaption(item.optString("details"), isSelected));
+            row.setEnd(pingMark(item.optString("id"), subId, isSelected));
             card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
         if (count == 0) {
@@ -406,22 +402,41 @@ final class ConnectionsPage extends Page {
         return Math.round(value / 1048576.0) + " МБ";
     }
 
-    /** Delay of a request through the server (see PingService); «проверяем…» while its group is checked; null before the first check. */
-    private TextView pingPill(String id, String group, boolean isSelected) {
+    /** The server in use also says what sites think of its exit; a tap on it opens the details. */
+    private String rowCaption(String details, boolean isSelected) {
+        return isSelected ? details + " · " + HomePage.exitVerdict(a.state) : details;
+    }
+
+    static String servers(int n) {
+        return n % 10 == 1 && n % 100 != 11 ? "сервер" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сервера" : "серверов";
+    }
+
+    /** Sort key: answered servers by delay, then unchecked, then those that did not answer. */
+    private long rank(String id) {
+        Long ms = pings.get(id);
+        return ms == null ? Long.MAX_VALUE - 1 : ms > 0 ? ms : Long.MAX_VALUE;
+    }
+
+    /** Delay as plain colored text at the row end; a small spinner while its group is checked; nothing before the first check. */
+    private View pingMark(String id, String group, boolean isSelected) {
+        if (pinging.contains(group)) {
+            android.widget.ProgressBar spin = new android.widget.ProgressBar(a, null, android.R.attr.progressBarStyleSmall);
+            spin.setLayoutParams(new android.widget.FrameLayout.LayoutParams(a.dp(18), a.dp(18)));
+            spin.setContentDescription("Пинг проверяется");
+            return spin;
+        }
         Long ms = pings.get(id);
         if (ms == null && isSelected && a.state != null && a.state.optLong("selectedPing") != 0) ms = a.state.optLong("selectedPing");
-        if (pinging.contains(group)) {
-            TextView wait = RowView.pill(a, "проверяем…", a.color(R.color.grey_soft), a.color(R.color.muted));
-            wait.setContentDescription("Пинг проверяется");
-            return wait;
-        }
         if (ms == null) return null;
+        TextView mark = new TextView(a);
+        mark.setTextAppearance(R.style.Caption);
+        mark.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        mark.setFontFeatureSettings("tnum");
         boolean good = ms > 0 && ms <= 300, ok = ms > 300 && ms <= 800;
-        TextView pill = RowView.pill(a, ms > 0 ? ms + " мс" : "нет ответа",
-                a.color(good ? R.color.green_soft : ok ? R.color.orange_soft : ms > 0 ? R.color.danger_soft : R.color.grey_soft),
-                a.color(good ? R.color.green_ink : ok ? R.color.orange_ink : ms > 0 ? R.color.danger : R.color.muted));
-        pill.setContentDescription(ms > 0 ? "Запрос через сервер: " + ms + " миллисекунд" : "Сервер не ответил");
-        return pill;
+        mark.setText(ms > 0 ? ms + " мс" : "нет ответа");
+        mark.setTextColor(a.color(good ? R.color.green_ink : ok ? R.color.orange_ink : ms > 0 ? R.color.danger : R.color.muted));
+        mark.setContentDescription(ms > 0 ? "Пинг " + ms + " миллисекунд" : "Сервер не ответил");
+        return mark;
     }
 
     /** @param force check again even if the VPN process has a result from the last ten minutes. */
@@ -477,10 +492,12 @@ final class ConnectionsPage extends Page {
         });
     }
 
-    private void subscriptionMenu(JSONObject sub) {
+    private void subscriptionMenu(JSONObject sub, boolean folded) {
         java.util.List<String> labels = new java.util.ArrayList<>();
         java.util.List<Runnable> actions = new java.util.ArrayList<>();
-        String support = sub.optString("supportUrl"), web = sub.optString("webUrl"), title = sub.optString("title");
+        String support = sub.optString("supportUrl"), web = sub.optString("webUrl"), title = sub.optString("title"), subId = sub.optString("id");
+        labels.add("Обновить серверы"); actions.add(() -> refreshSubscription(subId, title, false));
+        labels.add(folded ? "Показать серверы" : "Свернуть список"); actions.add(() -> setCollapsed(subId, !folded));
         if (!support.isEmpty()) { labels.add("Поддержка провайдера"); actions.add(() -> a.openUrl(support)); }
         if (!web.isEmpty()) { labels.add("Сайт провайдера"); actions.add(() -> a.openUrl(web)); }
         labels.add("Удалить подписку");

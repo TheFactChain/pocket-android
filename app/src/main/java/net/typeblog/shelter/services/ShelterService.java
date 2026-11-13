@@ -321,8 +321,8 @@ public class ShelterService extends Service {
         @Override public void setDirectRu(boolean enabled) throws RemoteException { vpn().setDirectRu(enabled); }
         @Override public void checkConnectionNow() throws RemoteException { vpn().checkNow(); }
         @Override public String listSubscriptions() throws RemoteException { return vpn().listSubscriptions(); }
-        @Override public String addSubscription(String url) throws RemoteException { return vpn().addSubscription(url); }
-        @Override public String refreshSubscription(String id) throws RemoteException { return vpn().refreshSubscription(id); }
+        @Override public String addSubscription(String url, boolean allowDevice) throws RemoteException { return vpn().addSubscription(url, allowDevice); }
+        @Override public String refreshSubscription(String id, boolean allowDevice) throws RemoteException { return vpn().refreshSubscription(id, allowDevice); }
         @Override public void deleteSubscription(String id) throws RemoteException { vpn().deleteSubscription(id); }
         @Override public void refreshDueSubscriptions() throws RemoteException { vpn().refreshDueSubscriptions(); }
         @Override public String pingConnections(String subscriptionId) throws RemoteException { return vpn().pingConnections(subscriptionId); }

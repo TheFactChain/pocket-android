@@ -67,8 +67,7 @@ final class XrayImport {
         if ((sockopt != null && !sockopt.optString("dialerProxy").isEmpty()) || proxy.has("proxySettings")) {
             throw invalid("цепочки серверов (Double VPN) пока не поддерживаются.");
         }
-        JSONObject mux = proxy.optJSONObject("mux");
-        if (mux != null && mux.optBoolean("enabled")) throw invalid("Mux от Xray не поддерживается.");
+        // Xray mux is only an optimisation: servers accept the same user without it.
         try {
             String protocol = proxy.optString("protocol");
             JSONObject flat;
@@ -160,7 +159,12 @@ final class XrayImport {
                 .put("serverName", string(tls, "serverName", ""));
         JSONObject mask = stream.optJSONObject("finalmask");
         JSONArray udp = mask == null ? null : mask.optJSONArray("udp");
-        if (mask != null && (mask.length() > 1 || (mask.length() == 1 && udp == null))) throw invalid("маскировка трафика не поддерживается.");
+        // quicParams only tune the client's QUIC (congestion control); they hide nothing, so the core's defaults do.
+        java.util.Iterator<String> keys = mask == null ? java.util.Collections.<String>emptyIterator() : mask.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (!key.equals("udp") && !key.equals("quicParams")) throw invalid("маскировка трафика не поддерживается.");
+        }
         for (int i = 0; udp != null && i < udp.length(); i++) {
             JSONObject item = udp.getJSONObject(i);
             JSONObject options2 = item.optJSONObject("settings");

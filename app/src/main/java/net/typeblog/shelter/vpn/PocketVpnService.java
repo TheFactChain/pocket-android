@@ -102,14 +102,16 @@ public class PocketVpnService extends VpnService {
             });
         }
         @Override public String listSubscriptions() { return call(() -> requireStore().subscriptionSummaries()); }
-        @Override public String addSubscription(String text) {
+        @Override public String addSubscription(String text, boolean allowDevice) {
             String url = Subscription.subscriptionUrl(text);
             if (url == null) throw new IllegalArgumentException("Нужна ссылка подписки https://…");
             Subscription existing = call(() -> requireStore().findSubscription(url));
-            return refresh(existing != null ? existing : Subscription.create(UUID.randomUUID().toString(), url), existing == null);
+            Subscription sub = existing != null ? existing : Subscription.create(UUID.randomUUID().toString(), url);
+            return refresh(allowDevice ? sub.withHwid(true) : sub, existing == null);
         }
-        @Override public String refreshSubscription(String id) {
-            return refresh(call(() -> requireStore().subscription(id)), false);
+        @Override public String refreshSubscription(String id, boolean allowDevice) {
+            Subscription sub = call(() -> requireStore().subscription(id));
+            return refresh(allowDevice ? sub.withHwid(true) : sub, false);
         }
         @Override public void deleteSubscription(String id) {
             call(() -> {
@@ -139,6 +141,23 @@ public class PocketVpnService extends VpnService {
     private static final String[] SUBSCRIPTION_AGENTS = {"Happ/3.11.0", "v2rayNG/1.10.16",
             "Pocket/" + net.typeblog.shelter.BuildConfig.VERSION_NAME};
 
+    /** The device id providers count against their limit: random per Pocket install, never a hardware id. */
+    private java.util.Map<String, String> deviceHeaders() {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String hwid = prefs.getString("subscription_hwid", null);
+        if (hwid == null) {
+            hwid = UUID.randomUUID().toString().replace("-", "");
+            prefs.edit().putString("subscription_hwid", hwid).commit();
+        }
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        headers.put("x-hwid", hwid);
+        headers.put("x-device-os", "Android");
+        headers.put("x-ver-os", android.os.Build.VERSION.RELEASE);
+        // The provider shows this name in the user's list of devices.
+        headers.put("x-device-model", "Pocket " + android.os.Build.MODEL);
+        return headers;
+    }
+
     /** Downloads and stores a subscription; runs on the caller's thread so the core keeps running meanwhile. */
     private String refresh(Subscription sub, boolean isNew) {
         long now = System.currentTimeMillis();
@@ -148,10 +167,21 @@ public class PocketVpnService extends VpnService {
             // Panels choose the format by User-Agent and send unknown apps a single «app not supported» stub,
             // so ask as the clients whose formats Pocket reads: Happ (Xray JSON), then v2rayNG (links).
             IllegalArgumentException firstProblem = null;
+            // The device id goes only to providers the user allowed; panels with a device limit
+            // (Remnawave «X-Hwid-Active») otherwise answer with a stub, and the user is asked.
+            java.util.Map<String, String> device = sub.hwid ? deviceHeaders() : java.util.Collections.<String, String>emptyMap();
             for (String agent : SUBSCRIPTION_AGENTS) {
-                response = Subscription.download(sub.url, agent);
+                response = Subscription.download(sub.url, agent, device);
                 try { parsed = ProfileImporter.parse(response.body); break; }
-                catch (IllegalArgumentException e) { if (firstProblem == null) firstProblem = e; }
+                catch (IllegalArgumentException e) {
+                    if (!sub.hwid && "true".equalsIgnoreCase(response.headers.get("x-hwid-active"))) {
+                        throw new Subscription.Failure(Subscription.NEEDS_DEVICE + " Разреши отправку случайного идентификатора Pocket, чтобы получить серверы.");
+                    }
+                    if (firstProblem == null) firstProblem = e;
+                }
+            }
+            if (parsed == null && sub.hwid && ProfileImporter.decodeBase64List(response.body).contains("@0.0.0.0:")) {
+                throw new Subscription.Failure("Провайдер не выдал серверы этому устройству. Возможно, исчерпан лимит устройств подписки: освободи место в боте или личном кабинете провайдера.");
             }
             if (parsed == null) throw firstProblem;
         } catch (java.io.IOException | IllegalArgumentException e) {
@@ -162,7 +192,7 @@ public class PocketVpnService extends VpnService {
             if (!isNew) call(() -> { store.updateSubscription(sub.failed(text, now)); return null; });
             throw new IllegalArgumentException(text);
         }
-        Subscription fresh = sub.updated(response.headers, response.body, now);
+        Subscription fresh = sub.updated(response.headers, response.body, now).withSkipped(parsed.warnings);
         final ProfileImporter.Result parsedServers = parsed;
         return call(() -> {
             List<String> changed = requireStore().applySubscription(fresh, parsedServers.profiles);
@@ -171,9 +201,6 @@ public class PocketVpnService extends VpnService {
             publish();
             JSONObject result = new JSONObject().put("id", fresh.id).put("title", fresh.toJson(false).getString("title"))
                     .put("count", parsedServers.profiles.size()).put("skipped", parsedServers.warnings.size()).put("selectedGone", gone);
-            for (ConnectionProfile value : store.all()) {
-                if (value.subscription.equals(fresh.id)) { result.put("firstId", value.id); break; }
-            }
             if (!parsedServers.warnings.isEmpty()) result.put("warning", parsedServers.warnings.get(0));
             return result.toString();
         });

@@ -68,6 +68,7 @@ public class SubscriptionTest {
 
     @Test public void xrayJsonListAsHappServesIt() throws Exception {
         JSONObject reality = xray("Austria", new JSONObject().put("protocol", "vless")
+                .put("mux", new JSONObject().put("enabled", true).put("concurrency", 8))
                 .put("settings", new JSONObject().put("vnext", new JSONArray().put(new JSONObject().put("address", "at.example").put("port", 443)
                         .put("users", new JSONArray().put(new JSONObject().put("id", USER).put("encryption", "none").put("flow", "xtls-rprx-vision"))))))
                 .put("streamSettings", new JSONObject().put("network", "tcp").put("security", "reality")
@@ -84,7 +85,8 @@ public class SubscriptionTest {
                 .put("streamSettings", new JSONObject().put("network", "hysteria").put("security", "tls")
                         .put("hysteriaSettings", new JSONObject().put("version", 2).put("auth", "hy-pass"))
                         .put("tlsSettings", new JSONObject().put("serverName", "hy.example"))
-                        .put("finalmask", new JSONObject().put("udp", new JSONArray().put(new JSONObject().put("type", "salamander")
+                        .put("finalmask", new JSONObject().put("quicParams", new JSONObject().put("congestion", "bbr"))
+                                .put("udp", new JSONArray().put(new JSONObject().put("type", "salamander")
                                 .put("settings", new JSONObject().put("password", "ob-pass")))))));
         JSONObject chained = xray("Double VPN", new JSONObject(grpc.getJSONArray("outbounds").getJSONObject(0).toString())
                 .put("streamSettings", new JSONObject().put("network", "tcp").put("security", "tls")
@@ -153,6 +155,22 @@ public class SubscriptionTest {
         assertEquals(sub.title, back.title);
         assertEquals(sub.url, back.url);
         assertFalse(sub.toJson(false).has("url"));
+    }
+
+    @Test public void deviceConsentAndSkippedServersSurviveStorageAndUpdates() {
+        Subscription sub = Subscription.create("id1", "https://sub.example/s/x");
+        assertFalse(sub.hwid);
+        Subscription allowed = sub.withHwid(true).withSkipped(java.util.Arrays.asList("«A» пропущено: xhttp", "«B» пропущено: x\u0007"));
+        assertEquals("«A» пропущено: xhttp\n«B» пропущено: x", allowed.skipped);
+        Subscription back = Subscription.fromJson(allowed.toJson(true));
+        assertTrue(back.hwid);
+        assertEquals(allowed.skipped, back.skipped);
+        // Consent stays after an update and after a failure; the skipped list is replaced on each update.
+        Subscription updated = back.updated(new HashMap<>(), REALITY, 1000).withSkipped(java.util.Collections.emptyList());
+        assertTrue(updated.hwid);
+        assertEquals("", updated.skipped);
+        assertTrue(updated.failed("x", 2000).hwid);
+        assertFalse(Subscription.fromJson(sub.toJson(true)).hwid);
     }
 
     @Test public void untitledSubscriptionFallsBackToHostAndDefaultInterval() {

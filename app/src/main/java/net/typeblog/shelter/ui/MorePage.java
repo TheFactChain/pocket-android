@@ -109,12 +109,13 @@ final class MorePage extends Page {
         box.addView(first);
         if (twice) box.addView(second);
         new AlertDialog.Builder(a).setTitle(title)
-                .setMessage(twice ? "Не короче 8 символов. Без пароля файл не открыть, восстановить его нельзя." : "Пароль, который ты задавал при сохранении.")
+                .setMessage(twice ? "Не короче 12 символов. Без пароля файл не открыть, восстановить его нельзя." : "Пароль, который ты задавал при сохранении.")
                 .setView(box)
                 .setPositiveButton(twice ? "Далее" : "Загрузить", (d, w) -> {
                     char[] pw = new char[first.length()];
                     first.getText().getChars(0, pw.length, pw, 0);
-                    if (pw.length < 8) { java.util.Arrays.fill(pw, '\0'); a.toast("Пароль — не короче 8 символов."); return; }
+                    int min = twice ? 12 : 8; // files saved earlier with 8 characters still open
+                    if (pw.length < min) { java.util.Arrays.fill(pw, '\0'); a.toast("Пароль — не короче " + min + " символов."); return; }
                     if (twice && !first.getText().toString().equals(second.getText().toString())) {
                         java.util.Arrays.fill(pw, '\0'); a.toast("Пароли не совпали. Введи их ещё раз."); return;
                     }

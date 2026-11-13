@@ -75,6 +75,10 @@ final class XrayImport {
                 if (outbound != null && next.equals(outbound.optString("tag"))) hop = outbound;
             }
             if (hop == null || !seen.add(next) || chain.length() > 4) throw invalid("цепочка серверов (Double VPN) ссылается на неизвестный сервер.");
+            // Every hop keeps certificate checks, as the first one does.
+            JSONObject hopStream = hop.optJSONObject("streamSettings");
+            JSONObject hopTls = hopStream == null ? null : hopStream.optJSONObject("tlsSettings");
+            if (hopTls != null) requireVerified(hopTls);
             chain.put(hop);
         }
         try {
@@ -123,10 +127,13 @@ final class XrayImport {
             if (domains != null && ips != null) continue; // Xray ANDs them, sing-box would OR them: wider than meant
             for (int k = 0; domains != null && k < domains.length() && k < 2048; k++) {
                 String d = domains.optString(k).trim().toLowerCase(java.util.Locale.ROOT);
-                if (d.startsWith("domain:")) suffix.put(d.substring(7));
-                else if (d.startsWith("full:")) domain.put(d.substring(5));
-                else if (d.startsWith("keyword:")) keyword.put(d.substring(8));
-                else if (!d.isEmpty() && !d.contains(":")) keyword.put(d); // Xray: a bare string matches anywhere in the name
+                String v = d.substring(d.indexOf(':') + 1);
+                // An empty or dot-only value would match every site and send everything direct.
+                if (!v.matches(".*[a-z0-9].*") || v.contains(":")) continue;
+                if (d.startsWith("domain:")) suffix.put(v);
+                else if (d.startsWith("full:")) domain.put(v);
+                else if (d.startsWith("keyword:")) keyword.put(v);
+                else if (!d.contains(":")) keyword.put(d); // Xray: a bare string matches anywhere in the name
             }
             for (int k = 0; ips != null && k < ips.length() && k < 4096; k++) {
                 String ip = ips.optString(k).trim();
@@ -149,7 +156,9 @@ final class XrayImport {
         boolean v6 = address.contains(":");
         if (v6 ? !address.matches("[0-9a-fA-F:]+(\\.[0-9.]+)?") : !address.matches("(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)")) return false;
         if (slash >= 0 && !value.substring(slash + 1).matches("\\d{1,3}")) return false;
-        if (slash >= 0 && Integer.parseInt(value.substring(slash + 1)) > (v6 ? 128 : 32)) return false;
+        int prefix = slash < 0 ? (v6 ? 128 : 32) : Integer.parseInt(value.substring(slash + 1));
+        // A whole-internet range (0.0.0.0/0 and the like) is not a site rule: it would send everything direct.
+        if (prefix > (v6 ? 128 : 32) || prefix < (v6 ? 16 : 8)) return false;
         // An address with ':' is parsed as an IPv6 literal, never looked up by name.
         try { return !v6 || java.net.InetAddress.getByName(address) instanceof java.net.Inet6Address; } catch (java.net.UnknownHostException e) { return false; }
     }

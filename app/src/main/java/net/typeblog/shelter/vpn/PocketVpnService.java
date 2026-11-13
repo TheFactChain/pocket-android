@@ -71,7 +71,7 @@ public class PocketVpnService extends VpnService {
             if (Binder.getCallingUid() != Process.myUid()) throw new SecurityException("Private VPN controller");
             return super.onTransact(code, data, reply, flags);
         }
-        @Override public String getPocketState() { return currentState(); }
+        @Override public String getPocketState() { uiReading(); return currentState(); }
         @Override public String listConnections() { return call(() -> requireStore().summaries()); }
         @Override public String readConnection(String id) { return call(() -> requireStore().get(id).toJson().toString()); }
         @Override public String saveConnection(String json) {
@@ -209,13 +209,13 @@ public class PocketVpnService extends VpnService {
             JSONObject result = new JSONObject();
             try {
                 synchronized (pings) {
-                    boolean fresh = !force && servers.length() > 0;
                     for (int i = 0; i < servers.length(); i++) {
                         long[] known = pings.get(servers.getJSONObject(i).getString("id"));
-                        if (known == null || now - known[1] > PING_CACHE_MS) { fresh = false; break; }
-                        result.put(servers.getJSONObject(i).getString("id"), known[0]);
+                        if (known != null && now - known[1] <= PING_CACHE_MS) result.put(servers.getJSONObject(i).getString("id"), known[0]);
                     }
-                    if (fresh || servers.length() == 0) return result.toString();
+                    // Servers are contacted from the real address, so only the user's «Проверить пинг» does it;
+                    // opening the screen shows what is already known.
+                    if (!force || servers.length() == 0) return result.toString();
                 }
                 Network real = call(() -> platform != null ? platform.getUnderlyingNetwork() : null);
                 if (real == null) real = getSystemService(android.net.ConnectivityManager.class).getActiveNetwork();
@@ -567,42 +567,23 @@ public class PocketVpnService extends VpnService {
             publish();
         });
         network.scheduleWithFixedDelay(this::refreshDue, 1, 30, TimeUnit.MINUTES);
-        interactive = getSystemService(android.os.PowerManager.class).isInteractive();
-        android.content.IntentFilter screen = new android.content.IntentFilter(Intent.ACTION_SCREEN_ON);
-        screen.addAction(Intent.ACTION_SCREEN_OFF);
-        registerReceiver(screenReceiver, screen);
     }
 
-    // ---- Battery: the tunnel itself costs nothing extra; the checks around it follow the screen ----
+    // ---- Battery: nothing runs on a timer while the tunnel works; traffic numbers only while Pocket is open ----
 
-    /** Screen on: traffic numbers flow and the server is checked every 5 min. Screen off: no numbers, one check in 30 min. */
-    private volatile boolean interactive = true;
+    private volatile long uiRead;
     private CommandClient statusClient;
-    private final android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
-        @Override public void onReceive(android.content.Context context, Intent intent) {
-            boolean on = Intent.ACTION_SCREEN_ON.equals(intent.getAction());
-            interactive = on;
-            if (closed) return;
-            worker.execute(() -> {
-                if (client == null) return;
-                if (on) {
-                    // After a long sleep the server is checked at once rather than in up to 30 min.
-                    final int ticket = generation;
-                    long last = health.verifiedElapsed(), now = android.os.SystemClock.elapsedRealtime();
-                    boolean stale = last < 0 || now - last > 600_000;
-                    if (stale && (probeDeadline == null || probeDeadline.isDone())) {
-                        if (probeTask != null) probeTask.cancel(false);
-                        probeTask = worker.schedule(() -> probe(ticket), 0, TimeUnit.MILLISECONDS);
-                    }
-                    startStatus(ticket);
-                } else stopStatus();
-            });
-        }
-    };
+    private static final long UI_IDLE_MS = 15_000;
 
-    /** Traffic counters only while the screen is on; nobody reads them otherwise. */
+    /** The open Pocket screen reads the state every 3 s: the first read starts the counters, silence stops them. */
+    private void uiReading() {
+        uiRead = android.os.SystemClock.elapsedRealtime();
+        if (!closed) worker.execute(() -> { if (statusClient == null && client != null) startStatus(generation); });
+    }
+
     private void startStatus(int ticket) {
         if (statusClient != null || client == null) return;
+        worker.schedule(() -> stopWhenIdle(ticket), UI_IDLE_MS, TimeUnit.MILLISECONDS);
         try {
             CommandClientOptions options = new CommandClientOptions();
             options.addCommand(Libbox.CommandStatus);
@@ -613,9 +594,16 @@ public class PocketVpnService extends VpnService {
         } catch (Exception e) { statusClient = null; }
     }
 
+    private void stopWhenIdle(int ticket) {
+        if (ticket != generation || statusClient == null) return;
+        long idle = android.os.SystemClock.elapsedRealtime() - uiRead;
+        if (idle >= UI_IDLE_MS) stopStatus();
+        else worker.schedule(() -> stopWhenIdle(ticket), UI_IDLE_MS - idle, TimeUnit.MILLISECONDS);
+    }
+
     private void stopStatus() {
         CommandClient old = statusClient; statusClient = null;
-        uplink = downlink = 0; // the rate is stale once the screen is off; totals stay
+        uplink = downlink = 0; // the rate is stale once nobody watches; totals stay
         if (old != null) { android.util.Log.i("PocketVPN", "Status client off"); try { old.disconnect(); } catch (Exception ignored) { } }
     }
 
@@ -787,12 +775,13 @@ public class PocketVpnService extends VpnService {
             String resolved = addresses[Math.floorMod(addressCursor++,addresses.length)].getHostAddress();
             JSONObject carrier = null;
             Network network = lastNetwork;
-            // Apps with their own connection (see PocketConfig.AppRoute); a deleted connection returns its apps to the default.
+            // Apps with their own connection (see PocketConfig.AppRoute); a deleted connection closes its apps until the user picks again.
+            List<String> orphaned = new java.util.ArrayList<>();
             java.util.Map<String, List<String>> byId = new java.util.LinkedHashMap<>();
             for (java.util.Map.Entry<String, ?> entry : appConnections().getAll().entrySet()) {
                 String id = String.valueOf(entry.getValue());
                 if (id.equals(selected.id)) continue;
-                try { store.get(id); } catch (IllegalArgumentException gone) { appConnections().edit().remove(entry.getKey()).apply(); continue; }
+                try { store.get(id); } catch (IllegalArgumentException gone) { orphaned.add(entry.getKey()); continue; }
                 byId.computeIfAbsent(id, k -> new java.util.ArrayList<>()).add(entry.getKey());
             }
             List<ConnectionProfile> extra = new java.util.ArrayList<>();
@@ -838,6 +827,7 @@ public class PocketVpnService extends VpnService {
             }
             List<PocketConfig.AppRoute> apps = new java.util.ArrayList<>();
             for (int i = 0; i < extra.size(); i++) apps.add(new PocketConfig.AppRoute(byId.get(extra.get(i).id), appOutbounds[i], extra.get(i)));
+            if (!orphaned.isEmpty()) apps.add(new PocketConfig.AppRoute(orphaned, null, null));
             String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier, apps, providerRules());
             Libbox.checkConfig(configuration);
             server = Libbox.newCommandServer(serverHandler(), platform);
@@ -848,7 +838,6 @@ public class PocketVpnService extends VpnService {
             options.addCommand(Libbox.CommandOutbounds);
             client = Libbox.newCommandClient(clientHandler(ticket), options);
             client.connect();
-            if (interactive) startStatus(ticket);
             retries=0; probeFailures=0;
             probeTask = worker.schedule(() -> probe(ticket), 1200, TimeUnit.MILLISECONDS);
             scheduleIpCheck(ticket, 4000);
@@ -870,7 +859,7 @@ public class PocketVpnService extends VpnService {
             return;
         }
         try {
-            android.util.Log.i("PocketVPN", "Health probe, screen " + (interactive ? "on" : "off"));
+            android.util.Log.i("PocketVPN", "Health probe");
             client.urlTest("proxy");
             probeDeadline=worker.schedule(() -> {
                 if (ticket != generation) return;
@@ -881,10 +870,10 @@ public class PocketVpnService extends VpnService {
                     error="Сервер пока не подтвердил связь. Прямой доступ заблокирован.";
                     publish();
                     if (probeFailures >= 3) { scheduleRetry(); return; }
+                    // Only an unanswered check is repeated. A working connection is not checked again: a start and every
+                    // network change check it once, and the TUN stays closed to direct traffic whatever the server does.
+                    probeTask=worker.schedule(() -> probe(ticket),30,TimeUnit.SECONDS);
                 }
-                // Network changes and starts already check at once; this only catches a server that died quietly.
-                // After a miss the next check comes soon, so a dead server is noticed in about a minute.
-                probeTask=worker.schedule(() -> probe(ticket),probeFailures>0?30:interactive?300:1800,TimeUnit.SECONDS);
             },17,TimeUnit.SECONDS);
         } catch (Exception e) {
             connectionState="RECONNECTING"; error="Связь восстанавливается"; publish(); scheduleRetry();
@@ -1034,7 +1023,6 @@ public class PocketVpnService extends VpnService {
     }
     @Override public void onDestroy() {
         closed=true;
-        try { unregisterReceiver(screenReceiver); } catch (IllegalArgumentException ignored) { }
         worker.execute(() -> { cancelRestart(); stopCore(); });
         worker.shutdown();
         network.shutdownNow();

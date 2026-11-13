@@ -718,7 +718,8 @@ final class ConnectionsPage extends Page {
                 // A working connection is never swapped silently: the user picks the new one in the list.
                 // One pasted server is the user's choice; from a list the user picks one.
                 int count = result.profiles.size();
-                boolean keep = !current.isEmpty() || count > 1;
+                // A link opened from a page or another app (errorView == null) is only added, never connected.
+                boolean keep = !current.isEmpty() || count > 1 || errorView == null;
                 if (!keep) a.mServiceWork.activateConnection(first);
                 String name = result.profiles.get(0).name;
                 String warning = result.warnings.isEmpty() ? "" : " " + result.warnings.get(0);

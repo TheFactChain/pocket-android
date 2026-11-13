@@ -34,6 +34,6 @@ public class SettingsBackupTest {
         try { SettingsBackup.decrypt(new JSONObject(file).put("iterations", 10).toString(), "correct horse".toCharArray()); fail(); }
         catch (IllegalArgumentException expected) { }
         try { SettingsBackup.encrypt(PLAIN, "short".toCharArray()); fail(); }
-        catch (IllegalArgumentException e) { assertEquals("Пароль — не короче 8 символов", e.getMessage()); }
+        catch (IllegalArgumentException e) { assertEquals("Пароль — не короче 12 символов", e.getMessage()); }
     }
 }

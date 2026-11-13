@@ -25,7 +25,8 @@ public class ProviderRulesTest {
                 .put(new JSONObject().put("outboundTag", "proxy").put("domain", new JSONArray().put("domain:com")))
                 .put(new JSONObject().put("outboundTag", "direct").put("port", "443").put("domain", new JSONArray().put("domain:x.ru")))
                 .put(new JSONObject().put("outboundTag", "direct").put("domain", new JSONArray().put("domain:y.ru")).put("ip", new JSONArray().put("1.1.1.1")))
-                .put(new JSONObject().put("outboundTag", "direct").put("domain", new JSONArray().put("geosite:cn"))));
+                .put(new JSONObject().put("outboundTag", "direct").put("domain", new JSONArray().put("geosite:cn")))
+                .put(new JSONObject().put("outboundTag", "direct").put("domain", new JSONArray().put("keyword:").put("domain:.").put("full:"))));
         assertEquals(2, out.length());
         JSONObject direct = out.getJSONObject(0);
         assertEquals("direct", direct.getString("action"));
@@ -81,6 +82,8 @@ public class ProviderRulesTest {
         assertFalse(XrayImport.isCidr("300.1.1.1"));
         assertFalse(XrayImport.isCidr("10.0.0.0/33"));
         assertFalse(XrayImport.isCidr("geoip:ru"));
+        assertFalse("The whole internet is not a site rule", XrayImport.isCidr("0.0.0.0/0"));
+        assertFalse(XrayImport.isCidr("::/0"));
         assertFalse(XrayImport.isCidr("example.com"));
     }
 }

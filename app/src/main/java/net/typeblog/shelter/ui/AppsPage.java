@@ -295,7 +295,7 @@ final class AppsPage extends Page {
             org.json.JSONObject value = a.connectionList.optJSONObject(i);
             if (value != null && id.equals(value.optString("id"))) return value.optString("name");
         }
-        return "как у всех";
+        return id.isEmpty() ? "как у всех" : a.connectionList == null ? "…" : "удалено, выбери другое";
     }
 
     private void chooseConnection(ApplicationInfoWrapper app) {

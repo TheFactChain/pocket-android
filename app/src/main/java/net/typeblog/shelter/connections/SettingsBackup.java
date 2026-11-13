@@ -25,7 +25,7 @@ public final class SettingsBackup {
     private SettingsBackup() { }
 
     public static String encrypt(String json, char[] password) {
-        checkPassword(password);
+        checkPassword(password, 12);
         byte[] salt = new byte[16], iv = new byte[12], plain = json.getBytes(StandardCharsets.UTF_8), key = null;
         SecureRandom random = new SecureRandom();
         random.nextBytes(salt);
@@ -48,7 +48,7 @@ public final class SettingsBackup {
     }
 
     public static String decrypt(String file, char[] password) {
-        checkPassword(password);
+        checkPassword(password, 8);
         if (file == null || file.length() > MAX_FILE) throw new IllegalArgumentException("Файл слишком большой или пустой");
         byte[] key = null, plain = null;
         try {
@@ -76,8 +76,9 @@ public final class SettingsBackup {
         }
     }
 
-    private static void checkPassword(char[] password) {
-        if (password == null || password.length < 8) throw new IllegalArgumentException("Пароль — не короче 8 символов");
+    /** New files need 12 characters; files saved earlier with 8 still open. */
+    private static void checkPassword(char[] password, int min) {
+        if (password == null || password.length < min) throw new IllegalArgumentException("Пароль — не короче " + min + " символов");
     }
 
     private static byte[] derive(char[] password, byte[] salt, int iterations) throws GeneralSecurityException {

@@ -193,6 +193,9 @@ public final class PingService extends Service {
             pool.execute(() -> {
                 try {
                     InetAddress address = network.getByName(servers[index].optString("server"));
+                    // A subscription must not point the phone at its own LAN or localhost.
+                    if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()
+                            || address.isAnyLocalAddress() || address.isMulticastAddress()) return;
                     addresses[index] = address.getHostAddress();
                 } catch (Exception ignored) { }
             });

@@ -24,13 +24,15 @@ public final class ConnectionProfile {
     public final String security, transport, path, wsHost;
     /** Id of the subscription this server came from, or empty for a connection added by hand. */
     public final String subscription;
+    /** VLESS only: split the TLS hello across TCP packets, as the provider's Xray config asks (finalmask fragment). */
+    public final boolean fragment;
     /** Types offered in the interface, as in Pocket Windows; VLESS stays readable by code only. */
     public static final java.util.List<String> UI_TYPES = Arrays.asList("hysteria2", "socks5", "http", "https");
 
     private ConnectionProfile(JSONObject json) {
         requireKeys(json, "id", "name", "type", "server", "port", "password", "uuid",
                 "serverName", "realityPublicKey", "shortId", "fingerprint", "flow", "obfsPassword", "username",
-                "security", "transport", "path", "host", "subscription");
+                "security", "transport", "path", "host", "subscription", "fragment");
         subscription = string(json, "subscription", "");
         if (subscription.length() > 128) throw invalid("Некорректная подписка подключения.");
         id =string(json, "id", UUID.randomUUID().toString());
@@ -67,6 +69,7 @@ public final class ConnectionProfile {
         if (!type.equals("hysteria2") && !obfsPassword.isEmpty()) {
             throw invalid("Маскировка Salamander есть только у Hysteria2.");
         }
+        fragment = type.equals("vless") && json.optBoolean("fragment");
         if (!type.equals("vless")) { security = ""; transport = ""; path = ""; wsHost = ""; }
         else {
             // Stored before TLS and transports existed: REALITY over TCP.
@@ -129,7 +132,7 @@ public final class ConnectionProfile {
                     .put("shortId", shortId).put("fingerprint", fingerprint).put("flow", flow)
                     .put("obfsPassword", obfsPassword).put("username", username)
                     .put("security", security).put("transport", transport).put("path", path).put("host", wsHost)
-                    .put("subscription", subscription);
+                    .put("subscription", subscription).put("fragment", fragment);
         } catch (JSONException e) {
             throw invalid("Не удалось сериализовать подключение.");
         }
@@ -182,6 +185,7 @@ public final class ConnectionProfile {
                 outbound.put("uuid", uuid).put("packet_encoding", "xudp");
                 if (!flow.isEmpty()) outbound.put("flow", flow);
                 tls.put("utls", new JSONObject().put("enabled", true).put("fingerprint", fingerprint));
+                if (fragment) tls.put("fragment", true);
                 if (security.equals("reality")) {
                     tls.put("reality", new JSONObject().put("enabled", true)
                             .put("public_key", realityPublicKey).put("short_id", shortId));

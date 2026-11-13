@@ -117,6 +117,12 @@ final class XrayImport {
                 if (!host.isEmpty()) flat.put("host", host);
             }
         } else throw invalid("транспорт " + label(network) + " пока не поддерживается.");
+        JSONObject mask = stream.optJSONObject("finalmask");
+        JSONArray tcpMask = mask == null ? null : mask.optJSONArray("tcp");
+        for (int i = 0; tcpMask != null && i < tcpMask.length(); i++) {
+            // The core splits the hello by its own sizes; the provider's lengths and intervals only tune it.
+            if (tcpMask.getJSONObject(i).optString("type").equals("fragment")) flat.put("fragment", true);
+        }
         String security = stream.optString("security", "none");
         if (security.equals("reality")) {
             JSONObject reality = stream.optJSONObject("realitySettings");

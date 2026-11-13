@@ -16,7 +16,9 @@ Pocket modifies three upstream files (2026-10-29, 2026-11-13):
   without that pair (Firefox 120, Safari, iOS, Edge, randomized in uTLS 1.8.7) use
   the Chrome fingerprint for REALITY, so the fingerprint named in such a profile is
   replaced for REALITY connections only. The hello also reports Xray client version
-  26.7.11 instead of 1.8.1, for servers that set `minClientVer`.
+  26.7.11 instead of 1.8.1, for servers that set `minClientVer`. The TLS
+  `fragment`/`record_fragment` options, which upstream applies to uTLS only, also
+  split the REALITY hello, as providers' Xray configs ask (finalmask fragment).
 
 The checked-in `libbox-pocket.patch` is part of the modified source
 distribution. Upstream copyright and LICENSE are unchanged. The uncalled private

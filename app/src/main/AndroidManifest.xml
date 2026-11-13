@@ -147,6 +147,8 @@
             <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
             <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="true" />
         </service>
+        <!-- Server check: a second core with only the servers, in its own short-lived process. -->
+        <service android:name=".vpn.PingService" android:process=":ping" android:exported="false" />
         <receiver android:name=".receivers.PocketBootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

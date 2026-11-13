@@ -325,7 +325,7 @@ public class ShelterService extends Service {
         @Override public String refreshSubscription(String id, boolean allowDevice) throws RemoteException { return vpn().refreshSubscription(id, allowDevice); }
         @Override public void deleteSubscription(String id) throws RemoteException { vpn().deleteSubscription(id); }
         @Override public void refreshDueSubscriptions() throws RemoteException { vpn().refreshDueSubscriptions(); }
-        @Override public String pingConnections(String subscriptionId) throws RemoteException { return vpn().pingConnections(subscriptionId); }
+        @Override public String pingConnections(String subscriptionId, boolean force) throws RemoteException { return vpn().pingConnections(subscriptionId, force); }
     };
 
     private net.typeblog.shelter.services.IPocketVpnService vpn(){

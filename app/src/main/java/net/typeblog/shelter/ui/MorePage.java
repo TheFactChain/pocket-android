@@ -15,7 +15,7 @@ import net.typeblog.shelter.shop.ShopCatalog;
 
 /** «Настройки» sheet: routing, IP control, support and about, each one row (updates have their own card on the home screen). */
 final class MorePage extends Page {
-    private SwitchMaterial directRu, ipControl;
+    private SwitchMaterial directRu, providerRules, ipControl;
     private RowView ipRow, intervalRow;
     private boolean applying;
 
@@ -37,6 +37,21 @@ final class MorePage extends Page {
             if (a.state.optBoolean("directRu", false) == on) return;
             a.toast(on ? "Российские сайты пойдут напрямую…" : "Весь интернет копий пойдёт через прокси…", true);
             a.remote(() -> { a.mServiceWork.setDirectRu(on); return null; },
+                    x -> { a.toast("Готово, прокси перезапущен."); a.refreshState(); },
+                    "Не удалось изменить маршрут. Открой Pocket снова.");
+        });
+
+        RowView provider = row(routing, R.drawable.ic_route, R.color.teal, "Правила провайдера", "Из подписки: что открыть напрямую, что закрыть");
+        providerRules = new SwitchMaterial(a);
+        providerRules.setContentDescription("Правила провайдера");
+        provider.setEnd(providerRules);
+        provider.setOnClickListener(v -> providerRules.toggle());
+        providerRules.setOnCheckedChangeListener((b, on) -> {
+            if (applying) return;
+            if (a.state == null) { applying = true; providerRules.setChecked(!on); applying = false; a.toast(a.linkProblem); return; }
+            if (a.state.optBoolean("providerRules", false) == on) return;
+            a.toast(on ? "Включаем правила провайдера…" : "Выключаем правила провайдера…", true);
+            a.remote(() -> { a.mServiceWork.setProviderRules(on); return null; },
                     x -> { a.toast("Готово, прокси перезапущен."); a.refreshState(); },
                     "Не удалось изменить маршрут. Открой Pocket снова.");
         });
@@ -181,6 +196,7 @@ final class MorePage extends Page {
         if (a.state == null) return;
         applying = true;
         directRu.setChecked(a.state.optBoolean("directRu", false));
+        providerRules.setChecked(a.state.optBoolean("providerRules", false));
         boolean on = a.state.optBoolean("ipControl", false);
         ipControl.setChecked(on);
         applying = false;

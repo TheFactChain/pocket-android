@@ -7,6 +7,7 @@ interface IPocketVpnService {
     void activateConnection(String id);
     void deleteConnection(String id);
     void setDirectRu(boolean enabled);
+    void setProviderRules(boolean enabled);
     void checkNow();
     void setIpControl(boolean enabled, int minutes);
     void confirmIp();

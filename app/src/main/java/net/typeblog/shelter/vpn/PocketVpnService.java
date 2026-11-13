@@ -987,6 +987,14 @@ public class PocketVpnService extends VpnService {
             // The last exit observed for the selected server, kept locally with its time.
             JSONObject exit=lastExit(state.optString("selectedId"));
             state.put("exitIp",exit.optString("ip")).put("exitIpTime",exit.optLong("time")).put("ratings",exit.optJSONArray("ratings")==null?new JSONArray():exit.getJSONArray("ratings"));
+            // Each server's exit country, for a flag beside servers whose name has none.
+            JSONObject countries=new JSONObject();
+            for(java.util.Map.Entry<String,?> e:exits().getAll().entrySet()){
+                try{ JSONArray rs=new JSONObject(String.valueOf(e.getValue())).optJSONArray("ratings");
+                    String c=rs==null||rs.length()==0?"":rs.getJSONObject(0).optString("country");
+                    if(!c.isEmpty()) countries.put(e.getKey(),c); }catch(JSONException ignored){}
+            }
+            state.put("countries",countries);
             return state.toString();
         } catch(Exception e){ return "{\"policyState\":\"UNCONFIRMED\",\"connectionState\":\"ERROR\"}"; }
     }

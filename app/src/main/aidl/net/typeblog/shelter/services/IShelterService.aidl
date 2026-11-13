@@ -39,6 +39,8 @@ interface IShelterService {
     void setIpControl(boolean enabled, int minutes);
     void confirmIp();
     void setAppConnection(String packageName, String connectionId);
+    String exportSettings(String password);
+    String importSettings(String file, String password);
     String diagnose();
     void checkExitIp();
     void checkConnectionNow();

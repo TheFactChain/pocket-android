@@ -58,6 +58,15 @@ final class MorePage extends Page {
         intervalRow = row(ip, R.drawable.ic_info, R.color.orange, "Проверять каждые", "30 мин");
         intervalRow.setOnClickListener(v -> askInterval());
 
+        LinearLayout transfer = group();
+        row(transfer, R.drawable.ic_info, R.color.accent, "Сохранить в файл", "Подключения, подписки, приложения и маршруты под паролем")
+                .setOnClickListener(v -> askPassword("Сохранить настройки", true, this::pickSaveFile));
+        row(transfer, R.drawable.ic_info, R.color.accent, "Загрузить из файла", "Добавит то, чего ещё нет; текущий сервер не сменится")
+                .setOnClickListener(v -> {
+                    a.settingsFileResult = uri -> askPassword("Загрузить настройки", false, pw -> importFile(uri, pw));
+                    a.openSettingsFile.launch(new String[]{"*/*"});
+                });
+
         LinearLayout help = group();
         row(help, R.drawable.ic_warning, R.color.orange, "Диагностика подключения", "Пошаговая проверка и отчёт")
                 .setOnClickListener(v -> new HomePage.DiagnosticsPage(a).showAsSheet());
@@ -65,6 +74,72 @@ final class MorePage extends Page {
                 .setOnClickListener(v -> a.openUrl(ShopCatalog.supportUrl()));
         row(help, R.drawable.ic_info, R.color.violet, "О Pocket", "Версия, лицензии")
                 .setOnClickListener(v -> a.startActivity(new Intent(a, SettingsActivity.class)));
+    }
+
+    private EditText passwordField(String hint) {
+        EditText field = new EditText(a);
+        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        field.setHint(hint);
+        field.setContentDescription(hint);
+        return field;
+    }
+
+    /** Asks for the file password (twice when saving); the caller gets it only if it is valid. */
+    private void askPassword(String title, boolean twice, java.util.function.Consumer<char[]> done) {
+        LinearLayout box = new LinearLayout(a);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (20 * a.getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+        EditText first = passwordField("Пароль от файла"), second = twice ? passwordField("Пароль ещё раз") : null;
+        box.addView(first);
+        if (twice) box.addView(second);
+        new AlertDialog.Builder(a).setTitle(title)
+                .setMessage(twice ? "Не короче 8 символов. Без пароля файл не открыть, восстановить его нельзя." : "Пароль, который ты задавал при сохранении.")
+                .setView(box)
+                .setPositiveButton(twice ? "Далее" : "Загрузить", (d, w) -> {
+                    char[] pw = new char[first.length()];
+                    first.getText().getChars(0, pw.length, pw, 0);
+                    if (pw.length < 8) { java.util.Arrays.fill(pw, '\0'); a.toast("Пароль — не короче 8 символов."); return; }
+                    if (twice && !first.getText().toString().equals(second.getText().toString())) {
+                        java.util.Arrays.fill(pw, '\0'); a.toast("Пароли не совпали. Введи их ещё раз."); return;
+                    }
+                    done.accept(pw);
+                })
+                .setNegativeButton("Отмена", null).show();
+    }
+
+    private void pickSaveFile(char[] password) {
+        a.settingsFileResult = uri -> a.remote(() -> {
+            String file = a.mServiceWork.exportSettings(new String(password));
+            try (java.io.OutputStream out = a.getContentResolver().openOutputStream(uri, "wt")) {
+                if (out == null) throw new java.io.IOException();
+                out.write(file.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } catch (java.io.IOException e) {
+                throw new IllegalArgumentException("Не удалось сохранить файл. Выбери другую папку.");
+            } finally { java.util.Arrays.fill(password, '\0'); }
+            return null;
+        }, x -> a.toast("Настройки сохранены в файл."), "Не удалось сохранить настройки. Открой Pocket снова.");
+        a.createSettingsFile.launch("Pocket-настройки.pocket");
+    }
+
+    private void importFile(android.net.Uri uri, char[] password) {
+        a.remote(() -> {
+            String text;
+            try (java.io.InputStream in = a.getContentResolver().openInputStream(uri); java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+                if (in == null) throw new java.io.IOException();
+                byte[] buffer = new byte[8192];
+                for (int n; (n = in.read(buffer)) != -1;) {
+                    if (out.size() + n > 512 * 1024) throw new IllegalArgumentException("Файл слишком большой. Выбери файл настроек Pocket.");
+                    out.write(buffer, 0, n);
+                }
+                text = out.toString("UTF-8");
+            } catch (java.io.IOException e) {
+                throw new IllegalArgumentException("Файл не прочитан. Выбери его ещё раз.");
+            }
+            try { return new org.json.JSONObject(a.mServiceWork.importSettings(text, new String(password))); }
+            finally { java.util.Arrays.fill(password, '\0'); }
+        }, r -> { a.toast("Добавлено: " + r.optInt("connections") + " подключений, " + r.optInt("subscriptions") + " подписок"); a.refreshState(); },
+                "Не удалось загрузить настройки. Открой Pocket снова.");
     }
 
     private void applyIp(boolean on, int minutes) {

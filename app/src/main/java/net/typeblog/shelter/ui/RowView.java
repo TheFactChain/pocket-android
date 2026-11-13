@@ -99,13 +99,29 @@ public class RowView extends LinearLayout {
         return this;
     }
 
-    /** A choice mark: a filled circle with a check when chosen, an empty soft circle otherwise. */
-    public RowView setRadio(boolean chosen) {
+    private TextView glyph;
+
+    /** A flag or a letter in a soft circle instead of a drawn icon; the ring turns accent when chosen. */
+    public RowView setGlyph(CharSequence text, boolean chosen) {
         tile.setVisibility(VISIBLE);
-        tile.setBackgroundResource(R.drawable.bg_circle);
-        icon.setImageResource(chosen ? R.drawable.ic_check : 0);
-        icon.setImageTintList(ColorStateList.valueOf(0xFFFFFFFF));
-        setTile(ContextCompat.getColor(getContext(), chosen ? R.color.accent : R.color.grey_soft));
+        icon.setImageDrawable(null);
+        if (glyph == null) {
+            glyph = new TextView(getContext());
+            glyph.setGravity(Gravity.CENTER);
+            glyph.setIncludeFontPadding(false);
+            tile.addView(glyph, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        }
+        glyph.setText(text);
+        boolean letter = text.length() == 1 && Character.isLetterOrDigit(text.charAt(0));
+        glyph.setTextSize(letter ? 14 : 19);
+        glyph.setTypeface(null, letter ? Typeface.BOLD : Typeface.NORMAL);
+        glyph.setTextColor(ContextCompat.getColor(getContext(), R.color.muted));
+        android.graphics.drawable.GradientDrawable ring = new android.graphics.drawable.GradientDrawable();
+        ring.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        ring.setColor(ContextCompat.getColor(getContext(), R.color.grey_soft));
+        if (chosen) ring.setStroke(dp(2), ContextCompat.getColor(getContext(), R.color.accent));
+        tile.setBackground(ring);
+        tile.setBackgroundTintList(null);
         return this;
     }
 

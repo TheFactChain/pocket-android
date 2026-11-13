@@ -78,6 +78,12 @@ public class MainActivity extends AppCompatActivity {
             new ActivityResultContracts.OpenDocument(), uri -> { if (uri != null) connections().readFile(uri); });
     final ActivityResultLauncher<String> createExportFile = registerForActivityResult(
             new ActivityResultContracts.CreateDocument("application/json"), uri -> connections().writeExport(uri));
+    /** Set by MorePage just before it opens a settings-file picker. */
+    java.util.function.Consumer<android.net.Uri> settingsFileResult;
+    final ActivityResultLauncher<String> createSettingsFile = registerForActivityResult(
+            new ActivityResultContracts.CreateDocument("application/octet-stream"), uri -> { java.util.function.Consumer<android.net.Uri> next = settingsFileResult; settingsFileResult = null; if (uri != null && next != null) next.accept(uri); });
+    final ActivityResultLauncher<String[]> openSettingsFile = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(), uri -> { java.util.function.Consumer<android.net.Uri> next = settingsFileResult; settingsFileResult = null; if (uri != null && next != null) next.accept(uri); });
     final ActivityResultLauncher<Intent> scanQr = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(), result -> {
                 if (result.getResultCode() == RESULT_OK && result.getData() != null) {

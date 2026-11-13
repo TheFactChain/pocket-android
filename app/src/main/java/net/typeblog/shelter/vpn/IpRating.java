@@ -24,7 +24,10 @@ public final class IpRating {
         if (value.optBoolean("is_tor")) flags.append(", Tor");
         if (value.optBoolean("is_relay")) flags.append(", релей");
         if (value.has("score")) flags.append(String.format(java.util.Locale.ROOT, ", риск %.0f%%", value.optDouble("score") * 100));
+        JSONObject info = value.optJSONObject("ip_info");
+        String country = info == null ? "" : info.optString("country_code").toUpperCase(java.util.Locale.ROOT);
         return new JSONObject().put("source", "IPLogs").put("risk", risk).put("summary", text + flags)
+                .put("country", country.matches("[A-Z]{2}") ? country : "")
                 .put("url", "https://iplogs.com/ip/" + ip).put("time", System.currentTimeMillis());
     }
 }

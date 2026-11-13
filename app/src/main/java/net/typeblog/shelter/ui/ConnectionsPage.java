@@ -77,14 +77,9 @@ final class ConnectionsPage extends Page {
         tools.addView(gap, new LinearLayout.LayoutParams(a.dp(10), 1));
         checkButton = chip("Проверить пинг", v -> pingAll());
         tools.addView(checkButton, new LinearLayout.LayoutParams(0, -2, 1));
-        content.addView(tools, new LinearLayout.LayoutParams(-1, -2));
-        checkStatus = new TextView(a);
-        checkStatus.setTextAppearance(R.style.Caption);
-        checkStatus.setGravity(android.view.Gravity.CENTER);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
-        statusParams.topMargin = a.dp(8);
-        statusParams.bottomMargin = a.dp(20);
-        content.addView(checkStatus, statusParams);
+        LinearLayout.LayoutParams toolsParams = new LinearLayout.LayoutParams(-1, -2);
+        toolsParams.bottomMargin = a.dp(16);
+        content.addView(tools, toolsParams);
         // «Сейчас»: the server in use, the address sites see and its quality, with the check one tap away.
         current = new LinearLayout(a);
         current.setOrientation(LinearLayout.VERTICAL);
@@ -141,7 +136,7 @@ final class ConnectionsPage extends Page {
         return top;
     }
 
-    private TextView checkStatus, checkButton;
+    private TextView checkButton;
     /** IP, traffic and the exit rating of the server in use; opened by a tap on it. */
     private final HomePage.MetricsPage metricsPage;
 
@@ -154,24 +149,13 @@ final class ConnectionsPage extends Page {
         }
     }
 
-    /** The line beside «Проверить пинг»: running, or how many of all servers answered and when. */
+    /** «Проверить пинг» shows it is running; the delays themselves are at each server. */
     private void updateCheckBar() {
-        if (checkStatus == null) return;
+        if (checkButton == null) return;
         boolean busy = !pinging.isEmpty();
         checkButton.setEnabled(!busy);
         checkButton.setAlpha(busy ? 0.5f : 1f);
         checkButton.setText(busy ? "Проверяем…" : "Проверить пинг");
-        int total = a.connectionList.length(), ok = 0;
-        long last = 0;
-        for (int i = 0; i < total; i++) {
-            JSONObject item = a.connectionList.optJSONObject(i);
-            Long ms = item == null ? null : pings.get(item.optString("id"));
-            if (ms != null && ms > 0) ok++;
-        }
-        for (long time : lastPing.values()) last = Math.max(last, time);
-        if (busy) checkStatus.setText("Проверяем серверы, это до 10 секунд");
-        else if (last == 0) checkStatus.setText(total == 0 ? "Добавь подключение, чтобы проверить пинг" : "Пинг ещё не проверялся");
-        else checkStatus.setText("Отвечают " + ok + " из " + total + " · " + HomePage.time(last));
     }
 
     private android.content.SharedPreferences uiPrefs() { return a.getSharedPreferences("pocket_ui", android.content.Context.MODE_PRIVATE); }
@@ -201,7 +185,7 @@ final class ConnectionsPage extends Page {
         view();
         // The rating and ping of the server in use arrive with the state, so they count as a change too.
         String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId") + a.state.optString("exitIp")
-                + a.state.optString("exitStatus") + a.state.optLong("exitIpTime") + a.state.optString("ratings"));
+                + a.state.optString("exitStatus") + a.state.optLong("exitIpTime") + a.state.optString("ratings") + a.state.optString("countries"));
         if (!json.equals(shownList)) { shownList = json; renderList(); }
         if (metricsPage.showing()) metricsPage.onState();
         stateText.setText(a.state == null ? a.linkProblem : "");
@@ -218,9 +202,9 @@ final class ConnectionsPage extends Page {
         if (name.isEmpty()) return;
         LinearLayout card = card(current);
         RowView row = new RowView(a);
-        row.setPadding(a.dp(16), a.dp(12), a.dp(12), a.dp(4));
+        row.setPadding(a.dp(16), a.dp(12), a.dp(12), a.dp(12));
         String flag = flag(name), shown = flag.isEmpty() ? name : name.replace(flag, " ").replaceAll("\\s+", " ").trim();
-        row.setGlyph(flag.isEmpty() ? shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT) : flag, true);
+        row.setGlyph(glyph(s.optString("selectedId"), flag, shown), true);
         row.setTitle(shown).setTitleBold(true);
         row.setBackground(null);
         String ip = s.optString("exitIp"), status = s.optString("exitStatus");
@@ -238,23 +222,12 @@ final class ConnectionsPage extends Page {
         // Everything else (what the rating saw, ping, traffic) is one tap away, inside Pocket.
         row.setOnClickListener(v -> { metricsPage.showAsSheet(); metricsPage.onState(); });
         card.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout actions = new LinearLayout(a);
-        actions.setPadding(a.dp(52), 0, a.dp(8), a.dp(6));
-        boolean checking = "CHECKING".equals(status);
-        TextView check = textAction(checking ? "Проверяем…" : "Проверить IP", v -> HomePage.checkExitIp(a));
-        check.setEnabled(!checking);
-        check.setAlpha(checking ? 0.5f : 1f);
-        actions.addView(check);
-        actions.addView(textAction("Подробнее", v -> { metricsPage.showAsSheet(); metricsPage.onState(); }));
-        card.addView(actions);
     }
 
-    /** «Риск 85 %» when the service gave a number, otherwise one short word. */
+    /** What sites are likely to think of the exit, in two words; the service's numbers are in the details. */
     static String ratingPill(JSONObject r) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("риск (\\d+)%").matcher(r.optString("summary"));
-        if (m.find()) return "Риск " + m.group(1) + "%";
         String risk = r.optString("risk");
-        return risk.equals("low") ? "Чистый" : risk.equals("medium") ? "Риск" : risk.equals("high") ? "VPN" : "Нет оценки";
+        return risk.equals("low") ? "Чистый IP" : risk.equals("medium") ? "Есть подозрения" : risk.equals("high") ? "Виден VPN" : "Нет оценки";
     }
 
     private void renderList() {
@@ -317,7 +290,7 @@ final class ConnectionsPage extends Page {
         RowView row = new RowView(a);
         String flag = flag(name), shown = flag.isEmpty() ? name : name.replace(flag, " ").replaceAll("\\s+", " ").trim();
         if (shown.isEmpty()) shown = name.isEmpty() ? "?" : name;
-        row.setGlyph(flag.isEmpty() ? shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT) : flag, isSelected);
+        row.setGlyph(glyph(id, flag, shown), isSelected);
         row.setTitle(shown).setTitleBold(isSelected);
         row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
         row.setOnClickListener(v -> {
@@ -362,7 +335,6 @@ final class ConnectionsPage extends Page {
     /** Last ping per server id in milliseconds; see ServerPing for the negative codes. */
     private final java.util.Map<String, Long> pings = new java.util.HashMap<>();
     /** When each group (manual = "") last got an answer, ms since epoch. */
-    private final java.util.Map<String, Long> lastPing = new java.util.HashMap<>();
     private final java.util.Set<String> pinging = new java.util.HashSet<>(), pinged = new java.util.HashSet<>();
     private final java.util.Set<String> refreshing = new java.util.HashSet<>();
 
@@ -499,6 +471,15 @@ final class ConnectionsPage extends Page {
         return isSelected ? "Используется" + (said ? "" : " · " + details) : said ? "" : details;
     }
 
+    /** The flag in the name; else the flag of the country its exit was seen in; else its first letter. */
+    private String glyph(String id, String flag, String shown) {
+        if (!flag.isEmpty()) return flag;
+        JSONObject countries = a.state == null ? null : a.state.optJSONObject("countries");
+        String code = countries == null ? "" : countries.optString(id);
+        if (code.matches("[A-Z]{2}")) return new String(Character.toChars(0x1F1E6 + code.charAt(0) - 'A')) + new String(Character.toChars(0x1F1E6 + code.charAt(1) - 'A'));
+        return shown.isEmpty() ? "?" : shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT);
+    }
+
     static String servers(int n) {
         return n % 10 == 1 && n % 100 != 11 ? "сервер" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? "сервера" : "серверов";
     }
@@ -546,7 +527,6 @@ final class ConnectionsPage extends Page {
             a.post(() -> {
                 pinging.remove(subId);
                 if (values == null) a.toast("Пинг не выполнен. Открой Pocket снова.");
-                else lastPing.put(subId, System.currentTimeMillis());
                 if (values != null) for (java.util.Iterator<String> keys = values.keys(); keys.hasNext();) {
                     String key = keys.next();
                     pings.put(key, values.optLong(key, -1));

@@ -155,6 +155,8 @@ public class PocketConfigTest {
         assertTrue(rating.getString("summary").contains("87%"));
         assertEquals("https://iplogs.com/ip/203.0.113.1", rating.getString("url"));
         assertEquals("unknown", net.typeblog.shelter.vpn.IpRating.fromIpLogs(new JSONObject(), "203.0.113.1").getString("risk"));
+        assertEquals("FR", net.typeblog.shelter.vpn.IpRating.fromIpLogs(new JSONObject().put("ip_info", new JSONObject().put("country_code", "fr")), "203.0.113.1").getString("country"));
+        assertEquals("Only a two-letter code becomes a flag", "", net.typeblog.shelter.vpn.IpRating.fromIpLogs(new JSONObject().put("ip_info", new JSONObject().put("country_code", "<x>")), "203.0.113.1").getString("country"));
     }
 
     @Test public void directRussianRoutingMatchesWindows() throws Exception {

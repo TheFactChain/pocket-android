@@ -220,11 +220,9 @@ final class HomePage extends Page {
                 RowView row = row(ratings, R.drawable.ic_shield, R.color.accent, "Оценка IP · " + r.optString("source", "сервис"), r.optString("summary", "—"));
                 String risk = r.optString("risk");
                 boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
-                row.setPill(low ? "низкий" : mid ? "средний" : high ? "высокий" : "н/д",
+                row.setPill(ConnectionsPage.ratingPill(r),
                         a.color(low ? R.color.green_soft : mid ? R.color.orange_soft : high ? R.color.danger_soft : R.color.grey_soft),
                         a.color(low ? R.color.green_ink : mid ? R.color.orange_ink : high ? R.color.danger : R.color.muted));
-                String url = r.optString("url");
-                if (!url.isEmpty()) row.setOnClickListener(v -> a.openUrl(url));
             }
         }
     }

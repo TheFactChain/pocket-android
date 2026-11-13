@@ -62,8 +62,8 @@ final class ConnectionsPage extends Page {
                 new int[]{a.color(R.color.pastel_yellow), a.color(R.color.pastel_orange), a.color(R.color.pastel_pink)});
         sun.setCornerRadius(a.dp(28));
         shop.setBackground(sun);
-        RowView buy = row(shop, R.drawable.ic_shield, R.color.ink, "Купить прокси", "Личный, уже настроен, с поддержкой");
-        buy.setTitleBold(true).setPadding(a.dp(16), a.dp(18), a.dp(14), a.dp(18));
+        RowView buy = row(shop, R.drawable.ic_shield, R.color.ink, "Купить прокси", "Личный, с поддержкой");
+        buy.setTitleBold(true).setPadding(a.dp(16), a.dp(12), a.dp(14), a.dp(12));
         buy.setBackground(null);
         buyPrice = buy.setPill(proxyPrice(), a.color(R.color.ink), 0xFFFFFFFF);
         buyPrice.setContentDescription("Цена " + buyPrice.getText());
@@ -217,40 +217,44 @@ final class ConnectionsPage extends Page {
         String name = s == null ? "" : s.optString("selectedName");
         if (name.isEmpty()) return;
         LinearLayout card = card(current);
-        TextView label = small(card, "Сейчас", R.color.muted);
-        label.setPadding(a.dp(16), a.dp(14), a.dp(16), 0);
         RowView row = new RowView(a);
+        row.setPadding(a.dp(16), a.dp(12), a.dp(12), a.dp(4));
         String flag = flag(name), shown = flag.isEmpty() ? name : name.replace(flag, " ").replaceAll("\\s+", " ").trim();
         row.setGlyph(flag.isEmpty() ? shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT) : flag, true);
         row.setTitle(shown).setTitleBold(true);
         row.setBackground(null);
         String ip = s.optString("exitIp"), status = s.optString("exitStatus");
-        row.setCaption(!ip.isEmpty() ? "IP " + ip + (s.optLong("exitIpTime") > 0 ? " · проверен " + HomePage.time(s.optLong("exitIpTime")) : "")
+        row.setCaption(!ip.isEmpty() ? ip + (s.optLong("exitIpTime") > 0 ? " · " + HomePage.time(s.optLong("exitIpTime")) : "")
                 : "CHECKING".equals(status) ? "Узнаём внешний IP…" : "UNAVAILABLE".equals(status) ? "Сервис проверки недоступен" : "IP ещё не проверен");
         JSONArray list = s.optJSONArray("ratings");
         JSONObject r = list == null || list.length() == 0 ? null : list.optJSONObject(0);
-        String risk = r == null ? "" : r.optString("risk");
-        boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
-        if (r != null) row.setPill(low ? "Чистый" : mid ? "Подозрительный" : high ? "Похож на VPN" : "Нет оценки",
-                a.color(low ? R.color.green_soft : mid ? R.color.orange_soft : high ? R.color.danger_soft : R.color.grey_soft),
-                a.color(low ? R.color.green_ink : mid ? R.color.orange_ink : high ? R.color.danger : R.color.muted));
-        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        if (r != null && !r.optString("summary").isEmpty()) {
-            // The rating's own words (hosting, proxy, risk %) without repeating the verdict in the pill.
-            String summary = r.optString("summary"), detail = summary.contains(", ") ? summary.substring(summary.indexOf(", ") + 2) : "";
-            if (!detail.isEmpty()) small(card, r.optString("source") + ": " + detail, R.color.muted).setPadding(a.dp(60), 0, a.dp(16), a.dp(4));
+        if (r != null) {
+            String risk = r.optString("risk");
+            boolean low = risk.equals("low"), mid = risk.equals("medium"), high = risk.equals("high");
+            row.setPill(ratingPill(r),
+                    a.color(low ? R.color.green_soft : mid ? R.color.orange_soft : high ? R.color.danger_soft : R.color.grey_soft),
+                    a.color(low ? R.color.green_ink : mid ? R.color.orange_ink : high ? R.color.danger : R.color.muted));
         }
+        // Everything else (what the rating saw, ping, traffic) is one tap away, inside Pocket.
+        row.setOnClickListener(v -> { metricsPage.showAsSheet(); metricsPage.onState(); });
+        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout actions = new LinearLayout(a);
-        actions.setPadding(a.dp(48), 0, a.dp(8), a.dp(8));
+        actions.setPadding(a.dp(52), 0, a.dp(8), a.dp(6));
         boolean checking = "CHECKING".equals(status);
         TextView check = textAction(checking ? "Проверяем…" : "Проверить IP", v -> HomePage.checkExitIp(a));
         check.setEnabled(!checking);
         check.setAlpha(checking ? 0.5f : 1f);
         actions.addView(check);
-        String url = r == null ? "" : r.optString("url");
-        if (!url.isEmpty()) actions.addView(textAction("Подробнее", v -> a.openUrl(url)));
-        actions.addView(textAction("Трафик", v -> { metricsPage.showAsSheet(); metricsPage.onState(); }));
+        actions.addView(textAction("Подробнее", v -> { metricsPage.showAsSheet(); metricsPage.onState(); }));
         card.addView(actions);
+    }
+
+    /** «Риск 85 %» when the service gave a number, otherwise one short word. */
+    static String ratingPill(JSONObject r) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("риск (\\d+)%").matcher(r.optString("summary"));
+        if (m.find()) return "Риск " + m.group(1) + "%";
+        String risk = r.optString("risk");
+        return risk.equals("low") ? "Чистый" : risk.equals("medium") ? "Риск" : risk.equals("high") ? "VPN" : "Нет оценки";
     }
 
     private void renderList() {
@@ -283,7 +287,7 @@ final class ConnectionsPage extends Page {
             boolean isSelected = id.equals(selected);
             boolean editable = ConnectionProfile.UI_TYPES.contains(type);
             RowView row = serverRow(item, isSelected);
-            row.setCaption(rowCaption(item.optString("details", type), isSelected));
+            row.setCaption(rowCaption(name, item.optString("details", type), isSelected));
             row.setEnd(pingMark(id, "", isSelected));
             // Editing is rare, so it lives behind a hold, like the apps grid; the tap stays «use this server».
             row.setOnLongClickListener(v -> {
@@ -438,7 +442,7 @@ final class ConnectionsPage extends Page {
         for (JSONObject item : rows) {
             boolean isSelected = item.optString("id").equals(selected);
             RowView row = serverRow(item, isSelected);
-            row.setCaption(rowCaption(item.optString("details"), isSelected));
+            row.setCaption(rowCaption(item.optString("name"), item.optString("details"), isSelected));
             row.setEnd(pingMark(item.optString("id"), subId, isSelected));
             card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
@@ -489,8 +493,10 @@ final class ConnectionsPage extends Page {
     }
 
     /** The server in use also says what sites think of its exit; a tap on it opens the details. */
-    private String rowCaption(String details, boolean isSelected) {
-        return isSelected ? "Используется · " + details : details;
+    private String rowCaption(String name, String details, boolean isSelected) {
+        // «Finland Hysteria2» needs no second «Hysteria2» under it: the row stays one line.
+        boolean said = !details.isEmpty() && name.toLowerCase(java.util.Locale.ROOT).contains(details.toLowerCase(java.util.Locale.ROOT));
+        return isSelected ? "Используется" + (said ? "" : " · " + details) : said ? "" : details;
     }
 
     static String servers(int n) {

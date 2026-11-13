@@ -1,0 +1,137 @@
+diff --git a/common/tls/reality_client.go b/common/tls/reality_client.go
+index be4806f..3362ac4 100644
+--- a/common/tls/reality_client.go
++++ b/common/tls/reality_client.go
+@@ -23,6 +23,7 @@ import (
+ 	"net"
+ 	"net/http"
+ 	"reflect"
++	"slices"
+ 	"strings"
+ 	"time"
+ 	"unsafe"
+@@ -30,7 +31,6 @@ import (
+ 	"github.com/sagernet/sing-box/adapter"
+ 	C "github.com/sagernet/sing-box/constant"
+ 	"github.com/sagernet/sing-box/option"
+-	"github.com/sagernet/sing/common"
+ 	"github.com/sagernet/sing/common/debug"
+ 	E "github.com/sagernet/sing/common/exceptions"
+ 	"github.com/sagernet/sing/common/logger"
+@@ -140,24 +140,23 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
+ 	uConfig.InsecureSkipVerify = true
+ 	uConfig.SessionTicketsDisabled = true
+ 	uConfig.VerifyPeerCertificate = verifier.VerifyPeerCertificate
+-	uConn := utls.UClient(conn, uConfig, e.uClient.id)
++	// Pocket: current Xray REALITY servers accept only a hello whose key shares are X25519MLKEM768
++	// followed by X25519, as Xray clients send. Upstream trimmed the hybrid share; keep it, and use
++	// the Chrome fingerprint for fingerprints that predate post-quantum keys.
++	// Randomized hellos are generated per connection, not as a reusable spec.
++	spec, err := utls.UTLSIdToSpec(e.uClient.id)
++	if err != nil || e.uClient.id.Client == "Randomized" || !realityKeyShares(&spec) {
++		spec, err = utls.UTLSIdToSpec(utls.HelloChrome_Auto)
++		if err != nil {
++			return nil, err
++		}
++	}
++	uConn := utls.UClient(conn, uConfig, utls.HelloCustom)
+ 	verifier.UConn = uConn
+-	err := uConn.BuildHandshakeState()
++	err = uConn.ApplyPreset(&spec)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	for _, extension := range uConn.Extensions {
+-		if ce, ok := extension.(*utls.SupportedCurvesExtension); ok {
+-			ce.Curves = common.Filter(ce.Curves, func(curveID utls.CurveID) bool {
+-				return curveID != utls.X25519MLKEM768
+-			})
+-		}
+-		if ks, ok := extension.(*utls.KeyShareExtension); ok {
+-			ks.KeyShares = common.Filter(ks.KeyShares, func(share utls.KeyShare) bool {
+-				return share.Group != utls.X25519MLKEM768
+-			})
+-		}
+-	}
+ 	err = uConn.BuildHandshakeState()
+ 	if err != nil {
+ 		return nil, err
+@@ -184,9 +183,11 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
+ 	}
+ 	binary.BigEndian.PutUint64(hello.SessionId, uint64(nowTime.Unix()))
+ 
+-	hello.SessionId[0] = 1
+-	hello.SessionId[1] = 8
+-	hello.SessionId[2] = 1
++	// Pocket: report an Xray client version, as panels may set minClientVer for REALITY.
++	hello.SessionId[0] = 26
++	hello.SessionId[1] = 7
++	hello.SessionId[2] = 11
++	hello.SessionId[3] = 0
+ 	binary.BigEndian.PutUint32(hello.SessionId[4:], uint32(time.Now().Unix()))
+ 	copy(hello.SessionId[8:], e.shortID[:])
+ 	if debug.Enabled {
+@@ -242,6 +243,18 @@ func (e *RealityClientConfig) ClientHandshake(ctx context.Context, conn net.Conn
+ 	return &realityClientConnWrapper{uConn}, nil
+ }
+ 
++// realityKeyShares reports whether the hello offers X25519MLKEM768 before a plain X25519 share.
++func realityKeyShares(spec *utls.ClientHelloSpec) bool {
++	for _, extension := range spec.Extensions {
++		if ks, ok := extension.(*utls.KeyShareExtension); ok {
++			hybrid := slices.IndexFunc(ks.KeyShares, func(share utls.KeyShare) bool { return share.Group == utls.X25519MLKEM768 })
++			classic := slices.IndexFunc(ks.KeyShares, func(share utls.KeyShare) bool { return share.Group == utls.X25519 })
++			return hybrid >= 0 && classic > hybrid
++		}
++	}
++	return false
++}
++
+ func realityClientFallback(ctx context.Context, uConn net.Conn, serverName string, fingerprint utls.ClientHelloID) {
+ 	defer uConn.Close()
+ 	client := &http.Client{
+diff --git a/experimental/libbox/command_server.go b/experimental/libbox/command_server.go
+index ec0af2a..ffa44f8 100644
+--- a/experimental/libbox/command_server.go
++++ b/experimental/libbox/command_server.go
+@@ -195,7 +195,7 @@ type OverrideOptions struct {
+ }
+ 
+ func (s *CommandServer) StartOrReloadService(configContent string, options *OverrideOptions) error {
+-	saveConfigSnapshot(configContent)
++	// Pocket never persists decrypted configuration snapshots.
+ 	if s.powerManager.Recorder() != nil {
+ 		copyConfigSnapshot(filepath.Join(sWorkingPath, powerreport.DraftDirectoryName))
+ 	}
+diff --git a/experimental/libbox/report.go b/experimental/libbox/report.go
+index ff5e0f4..bb2e893 100644
+--- a/experimental/libbox/report.go
++++ b/experimental/libbox/report.go
+@@ -3,7 +3,6 @@
+ package libbox
+ 
+ import (
+-	"bytes"
+ 	"encoding/json"
+ 	"os"
+ 	"path/filepath"
+@@ -60,17 +59,8 @@ func writeReportMetadata(destPath string, metadata any) {
+ 	writeReportFile(destPath, "metadata.json", data)
+ }
+ 
+-func copyConfigSnapshot(destPath string) {
+-	snapshotPath := configSnapshotPath()
+-	content, err := os.ReadFile(snapshotPath)
+-	if err != nil {
+-		return
+-	}
+-	if len(bytes.TrimSpace(content)) == 0 {
+-		return
+-	}
+-	writeReportFile(destPath, "configuration.json", content)
+-}
++// Pocket keeps decrypted configuration in memory and never includes it in reports.
++func copyConfigSnapshot(_ string) {}
+ 
+ func platformSnapshotPath() string {
+ 	return filepath.Join(sWorkingPath, "PlatformMetadata-"+sCrashReportSource+".json")

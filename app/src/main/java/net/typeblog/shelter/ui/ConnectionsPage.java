@@ -135,12 +135,38 @@ final class ConnectionsPage extends Page {
         row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
         row.setOnClickListener(v -> {
             if (isSelected) return;
-            a.toast("Переключаем на «" + name + "»…", true);
-            a.remote(() -> { a.mServiceWork.activateConnection(id); return null; },
-                    x -> { a.toast("Готово: «" + name + "» используется."); a.refreshState(); },
-                    "Не удалось выбрать подключение.");
+            String current = a.state == null ? "?" : a.state.optString("selectedId");
+            if (current.isEmpty()) { use(id, name); return; }
+            // Changing the server changes the external address, so it is never done on one tap.
+            String currentName = a.state == null ? "" : a.state.optString("selectedName");
+            new AlertDialog.Builder(a)
+                    .setTitle("Сменить подключение?")
+                    .setMessage((currentName.isEmpty() ? "Сейчас используется другое подключение." : "Сейчас используется «" + currentName + "».")
+                            + " После смены приложения в Pocket выйдут в интернет через «" + name + "» — внешний IP изменится.")
+                    .setPositiveButton("Сменить", (d, w) -> use(id, name))
+                    .setNegativeButton("Отмена", null)
+                    .show();
         });
         return row;
+    }
+
+    private void use(String id, String name) {
+        a.toast("Переключаем на «" + name + "»…", true);
+        a.remote(() -> { a.mServiceWork.activateConnection(id); return null; },
+                x -> { a.toast("Готово: «" + name + "» используется."); a.refreshState(); },
+                "Не удалось выбрать подключение.");
+    }
+
+    /** Asks once per provider before Pocket's random device id is sent; the provider counts it against its device limit. */
+    private void askDevice(String title, Runnable allowed) {
+        new AlertDialog.Builder(a)
+                .setTitle("Разрешить идентификатор устройства?")
+                .setMessage("Провайдер " + (title.isEmpty() ? "" : "«" + title + "» ") + "выдаёт серверы только устройствам с идентификатором. "
+                        + "Pocket отправит ему случайный номер этой установки, модель телефона и версию Android — не IMEI и не личные данные. "
+                        + "Устройство займёт место в лимите подписки.")
+                .setPositiveButton("Разрешить", (d, w) -> allowed.run())
+                .setNegativeButton("Отмена", null)
+                .show();
     }
 
     // ---- Subscriptions (as Happ shows them: provider, traffic, expiry, servers with ping) ----
@@ -174,7 +200,7 @@ final class ConnectionsPage extends Page {
         name.setText(title);
         top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         boolean busy = refreshing.contains(subId);
-        top.addView(textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title)));
+        top.addView(textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title, false)));
         top.addView(textAction(pinging.contains(subId) ? "Пинг…" : "Пинг", v -> ping(subId)));
         top.addView(textAction("Ещё", v -> subscriptionMenu(sub)));
 
@@ -183,7 +209,11 @@ final class ConnectionsPage extends Page {
                 + " · авто каждые " + sub.optInt("intervalHours", 12) + " ч";
         TextView metaText = small(header, meta, R.color.muted);
         metaText.setPadding(0, a.dp(2), 0, 0);
-        if (!sub.optString("error").isEmpty()) small(header, "Не обновилась: " + sub.optString("error") + " Работают прежние серверы.", R.color.danger);
+        String error = sub.optString("error");
+        if (error.startsWith(Subscription.NEEDS_DEVICE)) {
+            TextView ask = small(header, error + " Нажми, чтобы разрешить.", R.color.danger);
+            ask.setOnClickListener(v -> askDevice(title, () -> refreshSubscription(subId, title, true)));
+        } else if (!error.isEmpty()) small(header, "Не обновилась: " + error + " Работают прежние серверы.", R.color.danger);
 
         // Traffic and expiry, the two numbers people check first.
         long used = sub.optLong("upload") + sub.optLong("download"), total = sub.optLong("total"), expire = sub.optLong("expire");
@@ -248,6 +278,16 @@ final class ConnectionsPage extends Page {
             TextView empty = small(card, "В подписке пока нет серверов, которые Pocket умеет подключать.", R.color.muted);
             empty.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
         } else if (!pinged.contains(subId)) ping(subId);
+        // What the provider listed but Pocket cannot connect yet is shown, not dropped silently.
+        String skipped = sub.optString("skipped");
+        if (!skipped.isEmpty()) {
+            String[] lines = skipped.split("\n");
+            separator(card);
+            TextView view = small(card, "Не поддерживаются: " + lines.length + ". Подробнее", R.color.muted);
+            view.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
+            view.setOnClickListener(v -> new AlertDialog.Builder(a).setTitle("Не поддерживаются")
+                    .setMessage(skipped).setPositiveButton("Понятно", null).show());
+        }
     }
 
     private TextView small(LinearLayout parent, String text, int color) {
@@ -288,7 +328,7 @@ final class ConnectionsPage extends Page {
         });
     }
 
-    private void refreshSubscription(String subId, String title) {
+    private void refreshSubscription(String subId, String title, boolean allowDevice) {
         if (!refreshing.add(subId)) return;
         renderList();
         a.toast("Обновляем «" + title + "»…", true);
@@ -297,7 +337,7 @@ final class ConnectionsPage extends Page {
         a.worker.execute(() -> {
             String message;
             try {
-                JSONObject result = new JSONObject(work.refreshSubscription(subId));
+                JSONObject result = new JSONObject(work.refreshSubscription(subId, allowDevice));
                 message = "«" + result.optString("title") + "» обновлена: серверов " + result.optInt("count") + ".";
                 if (result.optBoolean("selectedGone")) message += " Выбранного сервера больше нет в подписке, он оставлен до выбора другого.";
             } catch (IllegalArgumentException e) {
@@ -347,8 +387,8 @@ final class ConnectionsPage extends Page {
                 .show();
     }
 
-    /** One paste: download the subscription, keep the current connection, or use the first server if none is chosen. */
-    private void addSubscription(String url, TextView errorView) {
+    /** One paste: download the subscription and show its servers; the user picks one, nothing is connected by itself. */
+    private void addSubscription(String url, TextView errorView, boolean allowDevice) {
         String current = a.state == null ? "?" : a.state.optString("selectedId");
         String currentName = a.state == null ? "" : a.state.optString("selectedName");
         if (errorView != null) errorView.setVisibility(View.GONE);
@@ -357,14 +397,12 @@ final class ConnectionsPage extends Page {
         if (work == null) { showError(errorView, a.linkProblem == null ? "Рабочий профиль недоступен." : a.linkProblem); return; }
         a.worker.execute(() -> {
             try {
-                JSONObject result = new JSONObject(work.addSubscription(url));
-                boolean use = current.isEmpty() && !result.optString("firstId").isEmpty();
-                if (use) work.activateConnection(result.optString("firstId"));
+                JSONObject result = new JSONObject(work.addSubscription(url, allowDevice));
                 int count = result.optInt("count"), skipped = result.optInt("skipped");
                 String message = "Подписка «" + result.optString("title") + "»: серверов " + count + "."
-                        + (skipped > 0 ? " Пропущено " + skipped + ": " + result.optString("warning") : "")
-                        + (use ? " Подключаемся к первому." : current.isEmpty() ? "" : " Текущее подключение"
-                        + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено; выбери сервер в списке.");
+                        + (skipped > 0 ? " Не поддерживаются: " + skipped + "." : "")
+                        + (current.isEmpty() ? " Выбери сервер в списке." : " Текущее подключение"
+                        + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено.");
                 a.post(() -> {
                     if (sheet != null) sheet.dismiss();
                     a.hideToast();
@@ -373,7 +411,12 @@ final class ConnectionsPage extends Page {
                     a.refreshState();
                 });
             } catch (IllegalArgumentException e) {
-                a.post(() -> { a.hideToast(); showError(errorView, e.getMessage()); });
+                String text = e.getMessage() == null ? "" : e.getMessage();
+                a.post(() -> {
+                    a.hideToast();
+                    if (!allowDevice && text.startsWith(Subscription.NEEDS_DEVICE)) askDevice("", () -> addSubscription(url, errorView, true));
+                    else showError(errorView, text);
+                });
             } catch (Exception e) {
                 a.post(() -> { a.hideToast(); showError(errorView, "Подписка не загрузилась. Открой Pocket снова."); });
             }
@@ -429,7 +472,11 @@ final class ConnectionsPage extends Page {
     /** Link, list of links, a Pocket Windows file or a sing-box config: saved; the first one is used only if none is selected yet. */
     void importText(String text, TextView errorView) {
         String subscription = Subscription.subscriptionUrl(text);
-        if (subscription != null) { addSubscription(subscription, errorView); return; }
+        if (subscription != null) { addSubscription(subscription, errorView, false); return; }
+        if (text.trim().regionMatches(true, 0, "happ://crypt", 0, 12)) {
+            showError(errorView, "Это зашифрованная ссылка Happ, её может открыть только Happ. Попроси у провайдера обычную ссылку подписки https://…");
+            return;
+        }
         // Unknown state counts as "something may be selected", so nothing is swapped blindly.
         String current = a.state == null ? "?" : a.state.optString("selectedId");
         String currentName = a.state == null ? "" : a.state.optString("selectedName");
@@ -445,15 +492,16 @@ final class ConnectionsPage extends Page {
                     if (first == null) first = id;
                 }
                 // A working connection is never swapped silently: the user picks the new one in the list.
-                boolean keep = !current.isEmpty();
+                // One pasted server is the user's choice; from a list the user picks one.
+                int count = result.profiles.size();
+                boolean keep = !current.isEmpty() || count > 1;
                 if (!keep) a.mServiceWork.activateConnection(first);
                 String name = result.profiles.get(0).name;
-                int count = result.profiles.size();
                 String warning = result.warnings.isEmpty() ? "" : " " + result.warnings.get(0);
                 String added = count == 1 ? "Добавлено «" + name + "»." : "Добавлено подключений: " + count + ".";
-                String message = keep
-                        ? added + " Текущее подключение" + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено; выбери новое в списке."
-                        : (count == 1 ? "Готово: «" + name + "» используется." : added + " Используется «" + name + "».");
+                String message = !keep ? "Готово: «" + name + "» используется."
+                        : current.isEmpty() ? added + " Выбери подключение в списке."
+                        : added + " Текущее подключение" + (currentName.isEmpty() ? "" : " «" + currentName + "»") + " не изменено; выбери новое в списке.";
                 a.post(() -> {
                     if (sheet != null) sheet.dismiss();
                     a.openConnections();
@@ -564,17 +612,28 @@ final class ConnectionsPage extends Page {
             } catch (org.json.JSONException e) {
                 error.setText("Проверь поля подключения."); error.setVisibility(View.VISIBLE); return;
             }
-            a.toast("Сохраняем и подключаемся…", true);
+            String using = a.state == null ? "?" : a.state.optString("selectedId");
+            boolean switching = !using.isEmpty() && !using.equals(id);
+            a.toast(switching ? "Сохраняем…" : "Сохраняем и подключаемся…", true);
             a.remote(() -> {
                 String saved = a.mServiceWork.saveConnection(profile.toJson().toString());
-                // Saving the selected connection already restarts the core.
-                if (a.state == null || !saved.equals(a.state.optString("selectedId"))) a.mServiceWork.activateConnection(saved);
+                // Saving the selected connection already restarts the core; another one is used only after confirmation.
+                if (!switching && !saved.equals(using)) a.mServiceWork.activateConnection(saved);
                 return saved;
             }, saved -> {
                 if (sheet != null) sheet.dismiss();
                 a.openConnections();
-                a.toast("Готово: «" + profile.name + "» используется.");
                 a.refreshState();
+                if (!switching) { a.toast("Готово: «" + profile.name + "» используется."); return; }
+                a.hideToast();
+                String currentName = a.state == null ? "" : a.state.optString("selectedName");
+                new AlertDialog.Builder(a)
+                        .setTitle("«" + profile.name + "» сохранено. Использовать его?")
+                        .setMessage((currentName.isEmpty() ? "Сейчас используется другое подключение." : "Сейчас используется «" + currentName + "».")
+                                + " После смены приложения в Pocket выйдут в интернет через «" + profile.name + "» — внешний IP изменится.")
+                        .setPositiveButton("Сменить", (d, w) -> use(saved, profile.name))
+                        .setNegativeButton("Оставить текущее", null)
+                        .show();
             }, "Не удалось сохранить подключение.");
         });
         if (id != null) {

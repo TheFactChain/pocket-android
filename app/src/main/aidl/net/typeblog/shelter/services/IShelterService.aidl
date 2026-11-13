@@ -38,8 +38,8 @@ interface IShelterService {
     void setDirectRu(boolean enabled);
     void checkConnectionNow();
     String listSubscriptions();
-    String addSubscription(String url);
-    String refreshSubscription(String id);
+    String addSubscription(String url, boolean allowDevice);
+    String refreshSubscription(String id, boolean allowDevice);
     void deleteSubscription(String id);
     void refreshDueSubscriptions();
     String pingConnections(String subscriptionId);

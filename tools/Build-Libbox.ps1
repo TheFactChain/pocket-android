@@ -1,13 +1,13 @@
-param([switch]$VerifySourceOnly)
+﻿param([switch]$VerifySourceOnly)
 $ErrorActionPreference = 'Stop'
 $taskOriginalRoot = Split-Path $PSScriptRoot -Parent
 $taskTag = 'v1.14.4'
 $taskCommit = 'c005f35300ce76427dc285481ec5695f5b179cd2'
-$taskPatchName = 'libbox-no-config-snapshots.patch'
-$taskPatchSHA256 = '90b038a7658d795cf824795578391014153190e4d74e9e3fbb6d3f0d9c07041a'
+$taskPatchName = 'libbox-pocket.patch'
+$taskPatchSHA256 = '37a141a6523cf47982612161f0d21c268ca48584dae18b723df3603ee0e278a3'
 $taskTags = 'with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0'
 $taskLinkerFlags = '-X github.com/sagernet/sing-box/constant.Version=1.14.4 -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid='
-$taskDriveLetter = 'R'..'Z' | Where-Object { -not (Test-Path -LiteralPath "${_}:\") } | Select-Object -First 1
+$taskDriveLetter = [char[]](82..90) | Where-Object { -not (Test-Path -LiteralPath "${_}:\") } | Select-Object -First 1
 if (-not $taskDriveLetter) { throw 'Для сборки нужен один свободный диск R–Z.' }
 $taskDrive = "${taskDriveLetter}:"
 $taskEnvironment = @{}
@@ -59,8 +59,12 @@ try {
         $taskBindArgs = @('bind', '-v', '-o', "$taskArtifacts/libbox.aar", '-target', 'android/arm64,android/arm',
             '-androidapi', '29', '-javapkg=io.nekohasekai', '-libname=box', '-trimpath', '-buildvcs=false',
             '-ldflags', $taskLinkerFlags, '-tags', $taskTags, './experimental/libbox')
+        # Windows PowerShell 5.1 turns redirected native stderr (gomobile -v) into terminating errors under Stop.
+        $ErrorActionPreference = 'Continue'
         & "$env:GOBIN/gomobile.exe" @taskBindArgs *> "$taskArtifacts/build.log"
-        if ($LASTEXITCODE -ne 0) { throw "Сборка libbox завершилась с ошибкой; см. .artifacts/libbox/build.log." }
+        $taskBindExit = $LASTEXITCODE
+        $ErrorActionPreference = 'Stop'
+        if ($taskBindExit -ne 0) { throw "Сборка libbox завершилась с ошибкой; см. .artifacts/libbox/build.log." }
     } finally { Pop-Location }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $taskArchive = [IO.Compression.ZipFile]::OpenRead("$taskArtifacts/libbox.aar")

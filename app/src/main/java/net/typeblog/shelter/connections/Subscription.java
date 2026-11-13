@@ -16,6 +16,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -28,7 +29,13 @@ import static net.typeblog.shelter.connections.ConnectionProfile.invalid;
  */
 public final class Subscription {
     public static final int DEFAULT_INTERVAL_HOURS = 12;
+    /** Start of the error a provider gives when it serves only devices that send x-hwid; the interface offers consent. */
+    public static final String NEEDS_DEVICE = "Провайдер выдаёт серверы только устройствам, которые сообщают идентификатор.";
     public final String id, url, title, supportUrl, webUrl, announce, error;
+    /** Servers the provider listed that Pocket cannot connect, one «name: reason» per line; never secrets. */
+    public final String skipped;
+    /** The user allowed sending this install's random device id (x-hwid) to this provider. */
+    public final boolean hwid;
     /** Bytes; total 0 means unlimited. Expire is Unix seconds, 0 when the provider gives no date. */
     public final long upload, download, total, expire;
     public final int intervalHours;
@@ -37,7 +44,8 @@ public final class Subscription {
 
     private Subscription(String id, String url, String title, String supportUrl, String webUrl, String announce,
                          String error, long upload, long download, long total, long expire, int intervalHours,
-                         long updated, long attempted) {
+                         long updated, long attempted, String skipped, boolean hwid) {
+        this.skipped = skipped; this.hwid = hwid;
         this.id = id; this.url = url; this.title = title; this.supportUrl = supportUrl; this.webUrl = webUrl;
         this.announce = announce; this.error = error; this.upload = upload; this.download = download;
         this.total = total; this.expire = expire; this.intervalHours = intervalHours;
@@ -68,7 +76,7 @@ public final class Subscription {
     }
 
     public static Subscription create(String id, String url) {
-        return new Subscription(id, url, "", "", "", "", "", 0, 0, 0, 0, DEFAULT_INTERVAL_HOURS, 0, 0);
+        return new Subscription(id, url, "", "", "", "", "", 0, 0, 0, 0, DEFAULT_INTERVAL_HOURS, 0, 0, "", false);
     }
 
     /** The same subscription after a successful download: provider fields are replaced, the link stays. */
@@ -105,12 +113,29 @@ public final class Subscription {
         int hours = (int) Math.min(24 * 7, number(values.get("profile-update-interval")));
         return new Subscription(id, url, name, link(values.get("support-url")), link(values.get("profile-web-page-url")),
                 text(decoded(values.get("announce")), 500), "", up, down, all, until,
-                hours > 0 ? hours : DEFAULT_INTERVAL_HOURS, now, now);
+                hours > 0 ? hours : DEFAULT_INTERVAL_HOURS, now, now, skipped, hwid);
+    }
+
+    /** Same subscription with the list of servers Pocket could not use. */
+    public Subscription withSkipped(List<String> warnings) {
+        StringBuilder text = new StringBuilder();
+        for (String warning : warnings) {
+            if (text.length() > 0) text.append('\n');
+            text.append(text(warning, 200));
+            if (text.length() > 4000) break;
+        }
+        return new Subscription(id, url, title, supportUrl, webUrl, announce, error, upload, download, total, expire,
+                intervalHours, updated, attempted, text.toString(), hwid);
+    }
+
+    public Subscription withHwid(boolean allowed) {
+        return new Subscription(id, url, title, supportUrl, webUrl, announce, error, upload, download, total, expire,
+                intervalHours, updated, attempted, skipped, allowed);
     }
 
     public Subscription failed(String message, long now) {
         return new Subscription(id, url, title, supportUrl, webUrl, announce, text(message, 200), upload, download,
-                total, expire, intervalHours, updated, now);
+                total, expire, intervalHours, updated, now, skipped, hwid);
     }
 
     /** Due when the provider's interval passed since the last success; failures retry after 15 minutes. */
@@ -124,7 +149,8 @@ public final class Subscription {
             JSONObject json = new JSONObject().put("id", id).put("title", title.isEmpty() ? host(url) : title)
                     .put("supportUrl", supportUrl).put("webUrl", webUrl).put("announce", announce).put("error", error)
                     .put("upload", upload).put("download", download).put("total", total).put("expire", expire)
-                    .put("intervalHours", intervalHours).put("updated", updated).put("attempted", attempted);
+                    .put("intervalHours", intervalHours).put("updated", updated).put("attempted", attempted)
+                    .put("skipped", skipped).put("hwid", hwid);
             if (includeUrl) json.put("url", url).put("rawTitle", title);
             return json;
         } catch (JSONException e) {
@@ -139,14 +165,14 @@ public final class Subscription {
         return new Subscription(id, url, json.optString("rawTitle"), json.optString("supportUrl"), json.optString("webUrl"),
                 json.optString("announce"), json.optString("error"), json.optLong("upload"), json.optLong("download"),
                 json.optLong("total"), json.optLong("expire"), Math.max(1, json.optInt("intervalHours", DEFAULT_INTERVAL_HOURS)),
-                json.optLong("updated"), json.optLong("attempted"));
+                json.optLong("updated"), json.optLong("attempted"), json.optString("skipped"), json.optBoolean("hwid"));
     }
 
     // ---- Download ----
 
     /** A failure whose message is safe and readable; any other IOException is a plain network error. */
     public static final class Failure extends IOException {
-        Failure(String message) { super(message); }
+        public Failure(String message) { super(message); }
     }
 
     public static final class Response {
@@ -157,7 +183,7 @@ public final class Subscription {
     }
 
     /** HTTPS only, at most three HTTPS redirects and 1 MiB; errors never contain the link. */
-    public static Response download(String url, String userAgent) throws IOException {
+    public static Response download(String url, String userAgent, Map<String, String> extraHeaders) throws IOException {
         String current = url;
         for (int redirects = 0; ; redirects++) {
             HttpURLConnection connection = (HttpURLConnection) new URL(current).openConnection();
@@ -167,6 +193,7 @@ public final class Subscription {
                 connection.setReadTimeout(15_000);
                 connection.setRequestProperty("User-Agent", userAgent);
                 connection.setRequestProperty("Accept", "*/*");
+                for (Map.Entry<String, String> header : extraHeaders.entrySet()) connection.setRequestProperty(header.getKey(), header.getValue());
                 int code = connection.getResponseCode();
                 if (code >= 300 && code < 400 && redirects < 3) {
                     String next = connection.getHeaderField("Location");

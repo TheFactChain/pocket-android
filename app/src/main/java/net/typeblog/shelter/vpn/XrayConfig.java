@@ -18,20 +18,73 @@ public final class XrayConfig {
     private XrayConfig() { }
 
     public static String create(ConnectionProfile profile, Resolver resolver, int port, String user, String password) throws Exception {
-        JSONArray outbounds = profile.xray.isEmpty() ? new JSONArray().put(fromLink(profile)) : new JSONArray(profile.xray);
+        JSONArray outbounds = outbounds(profile);
         for (int i = 0; i < outbounds.length(); i++) {
             JSONObject outbound = outbounds.getJSONObject(i);
             if (i == 0) outbound.put("tag", "proxy");
             resolveServers(outbound, resolver);
         }
-        JSONObject socks = new JSONObject().put("tag", "pocket-in").put("listen", "127.0.0.1").put("port", port).put("protocol", "socks")
-                .put("settings", new JSONObject().put("auth", "password").put("udp", true).put("ip", "127.0.0.1")
-                        .put("accounts", new JSONArray().put(new JSONObject().put("user", user).put("pass", password))));
         // The first outbound is Xray's default route; nothing else is configured, so nothing leaves around it.
         return new JSONObject().put("log", new JSONObject().put("loglevel", "none"))
-                .put("inbounds", new JSONArray().put(socks))
+                .put("inbounds", new JSONArray().put(socks("pocket-in", port, user, password)))
                 .put("outbounds", outbounds)
                 .toString();
+    }
+
+    /** The profile's Xray outbounds: the provider's as served, or one built from the link. */
+    public static JSONArray outbounds(ConnectionProfile profile) throws JSONException {
+        return profile.xray.isEmpty() ? new JSONArray().put(fromLink(profile)) : new JSONArray(profile.xray);
+    }
+
+    /**
+     * Several servers in one Xray for the server check: server i is reached through inbound «in-i» on ports[i]
+     * and its own outbounds, renamed «s-i-…» so chains of different servers stay apart.
+     * Servers whose names do not resolve are left out; the result lists the indexes kept.
+     */
+    public static String createMany(JSONArray[] servers, Resolver resolver, int[] ports, String user, String password, java.util.List<Integer> kept) throws Exception {
+        JSONArray inbounds = new JSONArray(), all = new JSONArray(), rules = new JSONArray();
+        for (int i = 0; i < servers.length; i++) {
+            if (servers[i] == null) continue;
+            JSONArray outbounds = new JSONArray(servers[i].toString());
+            java.util.Map<String, String> names = new java.util.HashMap<>();
+            for (int k = 0; k < outbounds.length(); k++) {
+                String tag = outbounds.getJSONObject(k).optString("tag");
+                names.put(tag, k == 0 ? "s-" + i : "s-" + i + "-" + k);
+            }
+            try {
+                for (int k = 0; k < outbounds.length(); k++) {
+                    JSONObject outbound = outbounds.getJSONObject(k);
+                    outbound.put("tag", k == 0 ? "s-" + i : "s-" + i + "-" + k);
+                    retarget(outbound, names);
+                    resolveServers(outbound, resolver);
+                }
+            } catch (Exception unresolved) { continue; }
+            for (int k = 0; k < outbounds.length(); k++) all.put(outbounds.get(k));
+            inbounds.put(socks("in-" + i, ports[i], user, password));
+            rules.put(new JSONObject().put("type", "field").put("inboundTag", new JSONArray().put("in-" + i)).put("outboundTag", "s-" + i));
+            kept.add(i);
+        }
+        // Nothing reaches a server it was not sent to: without a matching rule traffic is refused.
+        all.put(new JSONObject().put("tag", "refuse").put("protocol", "blackhole"));
+        JSONArray ordered = new JSONArray().put(all.get(all.length() - 1));
+        for (int k = 0; k < all.length() - 1; k++) ordered.put(all.get(k));
+        return new JSONObject().put("log", new JSONObject().put("loglevel", "none"))
+                .put("inbounds", inbounds).put("outbounds", ordered)
+                .put("routing", new JSONObject().put("rules", rules)).toString();
+    }
+
+    private static void retarget(JSONObject outbound, java.util.Map<String, String> names) throws JSONException {
+        JSONObject stream = outbound.optJSONObject("streamSettings");
+        JSONObject sockopt = stream == null ? null : stream.optJSONObject("sockopt");
+        if (sockopt != null && names.containsKey(sockopt.optString("dialerProxy"))) sockopt.put("dialerProxy", names.get(sockopt.optString("dialerProxy")));
+        JSONObject proxy = outbound.optJSONObject("proxySettings");
+        if (proxy != null && names.containsKey(proxy.optString("tag"))) proxy.put("tag", names.get(proxy.optString("tag")));
+    }
+
+    private static JSONObject socks(String tag, int port, String user, String password) throws JSONException {
+        return new JSONObject().put("tag", tag).put("listen", "127.0.0.1").put("port", port).put("protocol", "socks")
+                .put("settings", new JSONObject().put("auth", "password").put("udp", true).put("ip", "127.0.0.1")
+                        .put("accounts", new JSONArray().put(new JSONObject().put("user", user).put("pass", password))));
     }
 
     /** The sing-box outbound that carries everything into Xray. */

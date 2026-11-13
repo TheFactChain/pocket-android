@@ -575,7 +575,7 @@ public class PocketVpnService extends VpnService {
 
     // ---- Battery: the tunnel itself costs nothing extra; the checks around it follow the screen ----
 
-    /** Screen on: someone may look, so checks run every 30 s and traffic numbers flow. Screen off: one check in 5 min, no numbers. */
+    /** Screen on: traffic numbers flow and the server is checked every 5 min. Screen off: no numbers, one check in 30 min. */
     private volatile boolean interactive = true;
     private CommandClient statusClient;
     private final android.content.BroadcastReceiver screenReceiver = new android.content.BroadcastReceiver() {
@@ -586,9 +586,11 @@ public class PocketVpnService extends VpnService {
             worker.execute(() -> {
                 if (client == null) return;
                 if (on) {
-                    // The status shown right after unlocking must be fresh, so the check runs now, not in up to 5 min.
+                    // After a long sleep the server is checked at once rather than in up to 30 min.
                     final int ticket = generation;
-                    if (probeDeadline == null || probeDeadline.isDone()) {
+                    long last = health.verifiedElapsed(), now = android.os.SystemClock.elapsedRealtime();
+                    boolean stale = last < 0 || now - last > 600_000;
+                    if (stale && (probeDeadline == null || probeDeadline.isDone())) {
                         if (probeTask != null) probeTask.cancel(false);
                         probeTask = worker.schedule(() -> probe(ticket), 0, TimeUnit.MILLISECONDS);
                     }
@@ -605,6 +607,7 @@ public class PocketVpnService extends VpnService {
             CommandClientOptions options = new CommandClientOptions();
             options.addCommand(Libbox.CommandStatus);
             options.setStatusInterval(2_000_000_000L);
+            android.util.Log.i("PocketVPN", "Status client on");
             statusClient = Libbox.newCommandClient(statusHandler(ticket), options);
             statusClient.connect();
         } catch (Exception e) { statusClient = null; }
@@ -613,7 +616,7 @@ public class PocketVpnService extends VpnService {
     private void stopStatus() {
         CommandClient old = statusClient; statusClient = null;
         uplink = downlink = 0; // the rate is stale once the screen is off; totals stay
-        if (old != null) try { old.disconnect(); } catch (Exception ignored) { }
+        if (old != null) { android.util.Log.i("PocketVPN", "Status client off"); try { old.disconnect(); } catch (Exception ignored) { } }
     }
 
     @Override public IBinder onBind(Intent intent) {
@@ -867,6 +870,7 @@ public class PocketVpnService extends VpnService {
             return;
         }
         try {
+            android.util.Log.i("PocketVPN", "Health probe, screen " + (interactive ? "on" : "off"));
             client.urlTest("proxy");
             probeDeadline=worker.schedule(() -> {
                 if (ticket != generation) return;
@@ -878,7 +882,9 @@ public class PocketVpnService extends VpnService {
                     publish();
                     if (probeFailures >= 3) { scheduleRetry(); return; }
                 }
-                probeTask=worker.schedule(() -> probe(ticket),interactive?30:300,TimeUnit.SECONDS);
+                // Network changes and starts already check at once; this only catches a server that died quietly.
+                // After a miss the next check comes soon, so a dead server is noticed in about a minute.
+                probeTask=worker.schedule(() -> probe(ticket),probeFailures>0?30:interactive?300:1800,TimeUnit.SECONDS);
             },17,TimeUnit.SECONDS);
         } catch (Exception e) {
             connectionState="RECONNECTING"; error="Связь восстанавливается"; publish(); scheduleRetry();
@@ -986,10 +992,6 @@ public class PocketVpnService extends VpnService {
         try {
             JSONObject state=new JSONObject(snapshot);
             state.put("policyState",ProtectionPolicy.isOwner(this)?(ProtectionPolicy.confirmed(this)?"CONFIRMED":"UNCONFIRMED"):"NO_PROFILE");
-            long checked=state.optLong("lastCheckElapsed",-1),now=android.os.SystemClock.elapsedRealtime();
-            if("CONNECTED".equals(state.optString("connectionState")) && (checked<0 || now<checked || now-checked>(interactive?75000:330000))) {
-                state.put("connectionState","RECONNECTING"); state.put("error","Ожидаем свежую проверку связи");
-            }
             state.put("appConnections",new JSONObject(appConnections().getAll()));
             state.put("uplink",uplink).put("downlink",downlink).put("uplinkTotal",uplinkTotal).put("downlinkTotal",downlinkTotal)
                     .put("sessionStart",sessionStart).put("selectedPing",selectedPing).put("exitStatus",exitStatus);

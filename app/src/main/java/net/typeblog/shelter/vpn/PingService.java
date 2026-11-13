@@ -69,22 +69,27 @@ public final class PingService extends Service {
             Map<String, String> tags = new HashMap<>();
             JSONArray outbounds = new JSONArray(), members = new JSONArray();
             JSONObject[] values = new JSONObject[servers.length()];
+            JSONArray[] chains = new JSONArray[servers.length()];
             String[] ids = new String[servers.length()];
             for (int i = 0; i < servers.length(); i++) {
                 ids[i] = servers.getJSONObject(i).getString("id");
-                values[i] = servers.getJSONObject(i).getJSONObject("outbound");
+                String xray = servers.getJSONObject(i).optString("xray");
+                // VLESS is measured on Xray, the core that carries it in the working tunnel.
+                if (!xray.isEmpty()) chains[i] = new JSONArray(xray);
+                else values[i] = servers.getJSONObject(i).getJSONObject("outbound");
                 result.put(ids[i], FAILED);
             }
             // Server names are resolved on the physical network, as for the working tunnel; the test page's
             // name goes to the server, so this core needs no DNS of its own.
             String[] addresses = resolve(network, values);
             for (int i = 0; i < values.length; i++) {
-                if (addresses[i] == null) continue;
+                if (values[i] == null || addresses[i] == null) continue;
                 String tag = "s" + i;
                 tags.put(tag, ids[i]);
                 outbounds.put(values[i].put("tag", tag).put("server", addresses[i]));
                 members.put(tag);
             }
+            if (startXray(network, chains, outbounds, members, tags, ids)) xrayRunning = true;
             if (members.length() == 0) return result.toString();
             outbounds.put(new JSONObject().put("type", "selector").put("tag", "ping").put("outbounds", members));
             String config = new JSONObject().put("log", new JSONObject().put("disabled", true))
@@ -134,8 +139,44 @@ public final class PingService extends Service {
                 try { server.close(); } catch (RuntimeException ignored) { }
             }
             if (platform != null) try { platform.close(); } catch (Exception ignored) { }
+            if (xrayRunning) { xrayRunning = false; try { io.nekohasekai.pocketxray.Pocketxray.stop(); } catch (Exception ignored) { } }
         }
         return result.toString();
+    }
+
+    private boolean xrayRunning;
+
+    /** Starts one Xray for the VLESS servers; sing-box reaches server i through its SOCKS inbound. */
+    private boolean startXray(Network network, JSONArray[] chains, JSONArray outbounds, JSONArray members, Map<String, String> tags, String[] ids) throws Exception {
+        int[] ports = new int[chains.length];
+        boolean any = false;
+        for (int i = 0; i < chains.length; i++) {
+            if (chains[i] == null) continue;
+            try (java.net.ServerSocket probe = new java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { ports[i] = probe.getLocalPort(); }
+            any = true;
+        }
+        if (!any) return false;
+        go.Seq.setContext(getApplicationContext());
+        String user = UUID.randomUUID().toString(), password = UUID.randomUUID().toString();
+        java.util.List<Integer> kept = new java.util.ArrayList<>();
+        String config = XrayConfig.createMany(chains, host -> {
+            for (InetAddress address : network.getAllByName(host)) if (address instanceof java.net.Inet4Address) return address.getHostAddress();
+            throw new java.net.UnknownHostException();
+        }, ports, user, password, kept);
+        if (kept.isEmpty()) return false;
+        // Xray's sockets use the physical network, as the core's do in this process.
+        io.nekohasekai.pocketxray.Pocketxray.setProtector(fd -> {
+            try (android.os.ParcelFileDescriptor socket = android.os.ParcelFileDescriptor.fromFd(fd)) { network.bindSocket(socket.getFileDescriptor()); return true; }
+            catch (Exception e) { return false; }
+        });
+        io.nekohasekai.pocketxray.Pocketxray.start(config);
+        for (int i : kept) {
+            String tag = "s" + i;
+            tags.put(tag, ids[i]);
+            outbounds.put(XrayConfig.socksOutbound(ports[i], user, password).put("tag", tag));
+            members.put(tag);
+        }
+        return true;
     }
 
     private static String[] resolve(Network network, JSONObject[] servers) {

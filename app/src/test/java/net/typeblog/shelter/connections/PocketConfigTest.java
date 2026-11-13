@@ -107,6 +107,21 @@ public class PocketConfigTest {
         assertEquals("192.0.2.1", outbounds.getJSONObject(1).getJSONObject("settings").getJSONArray("vnext").getJSONObject(0).getString("address"));
         assertEquals("entry", outbounds.getJSONObject(0).getJSONObject("streamSettings").getJSONObject("sockopt").getString("dialerProxy"));
         assertTrue(ConnectionProfile.fromJson(profile.toJson()).chained());
+
+        // The server check puts several servers in one Xray; each chain keeps its own hops.
+        org.json.JSONArray[] servers = {net.typeblog.shelter.vpn.XrayConfig.outbounds(profile), null,
+                net.typeblog.shelter.vpn.XrayConfig.outbounds(profile)};
+        java.util.List<Integer> kept = new java.util.ArrayList<>();
+        JSONObject many = new JSONObject(net.typeblog.shelter.vpn.XrayConfig.createMany(servers, host -> {
+            if (kept.size() == 1) throw new java.net.UnknownHostException(host);
+            return "192.0.2.3";
+        }, new int[]{20001, 0, 20003}, "u", "p", kept));
+        assertEquals(java.util.Collections.singletonList(0), kept);
+        assertEquals("blackhole", many.getJSONArray("outbounds").getJSONObject(0).getString("protocol"));
+        assertEquals("s-0-1", many.getJSONArray("outbounds").getJSONObject(1).getJSONObject("streamSettings")
+                .getJSONObject("sockopt").getString("dialerProxy"));
+        assertEquals(1, many.getJSONArray("inbounds").length());
+        assertEquals("s-0", many.getJSONObject("routing").getJSONArray("rules").getJSONObject(0).getString("outboundTag"));
     }
 
     @Test public void directRussianRoutingMatchesWindows() throws Exception {

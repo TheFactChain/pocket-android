@@ -161,7 +161,8 @@ public class PocketVpnService extends VpnService {
             JSONArray servers = call(() -> {
                 JSONArray chosen = new JSONArray();
                 for (ConnectionProfile value : requireStore().all()) {
-                    if (value.subscription.equals(subscriptionId)) chosen.put(new JSONObject().put("id", value.id).put("outbound", value.toOutbound()));
+                    if (value.subscription.equals(subscriptionId)) chosen.put(new JSONObject().put("id", value.id).put("outbound", value.toOutbound())
+                            .put("xray", value.type.equals("vless") ? XrayConfig.outbounds(value).toString() : ""));
                 }
                 return chosen;
             });

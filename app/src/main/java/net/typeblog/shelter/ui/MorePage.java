@@ -23,13 +23,13 @@ final class MorePage extends Page {
         RowView ru = row(routing, R.drawable.ic_route, R.color.green, "Российские сайты напрямую", "Зарубежные всегда через прокси");
         directRu = new SwitchMaterial(a);
         directRu.setContentDescription("Российские сайты напрямую");
-        directRu.setChecked(true);
+        directRu.setChecked(false);
         ru.setEnd(directRu);
         ru.setOnClickListener(v -> directRu.toggle());
         directRu.setOnCheckedChangeListener((b, on) -> {
             if (applying) return;
             if (a.state == null) { applying = true; directRu.setChecked(!on); applying = false; a.toast(a.linkProblem); return; }
-            if (a.state.optBoolean("directRu", true) == on) return;
+            if (a.state.optBoolean("directRu", false) == on) return;
             a.toast(on ? "Российские сайты пойдут напрямую…" : "Весь интернет копий пойдёт через прокси…", true);
             a.remote(() -> { a.mServiceWork.setDirectRu(on); return null; },
                     x -> { a.toast("Готово, прокси перезапущен."); a.refreshState(); },
@@ -47,7 +47,7 @@ final class MorePage extends Page {
         view();
         if (a.state != null) {
             applying = true;
-            directRu.setChecked(a.state.optBoolean("directRu", true));
+            directRu.setChecked(a.state.optBoolean("directRu", false));
             applying = false;
         }
     }

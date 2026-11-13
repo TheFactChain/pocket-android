@@ -44,6 +44,21 @@ public class PocketConfigTest {
         }
     }
 
+    @Test public void visionRefusesQuicLikeXrayButKeepsOtherUdp() throws Exception {
+        String key = "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0", user = "bf000d23-0752-40b4-affe-68f7707a9661";
+        ConnectionProfile vision = ProfileImporter.parse("vless://" + user + "@de.example:443?security=reality&type=tcp"
+                + "&flow=xtls-rprx-vision&sni=www.example.com&pbk=" + key + "&sid=ab").profiles.get(0);
+        org.json.JSONArray rules = new JSONObject(PocketConfig.create(vision, "192.0.2.1")).getJSONObject("route").getJSONArray("rules");
+        boolean quicRefused = false;
+        for (int i = 0; i < rules.length(); i++) {
+            JSONObject rule = rules.getJSONObject(i);
+            quicRefused |= "udp".equals(rule.optString("network")) && rule.optInt("port") == 443 && "reject".equals(rule.optString("action"));
+        }
+        assertTrue(quicRefused);
+        ConnectionProfile grpc = ProfileImporter.parse("vless://" + user + "@at.example:443?security=tls&type=grpc&serviceName=s").profiles.get(0);
+        assertFalse(new JSONObject(PocketConfig.create(grpc, "192.0.2.1")).toString().contains("\"network\":\"udp\""));
+    }
+
     @Test public void directRussianRoutingMatchesWindows() throws Exception {
         ConnectionProfile profile = ProfileImporter.parse("hy2://pw@vpn.example").profiles.get(0);
         java.util.List<String> nets = PocketConfig.parseNetworks(new java.io.FileReader("src/main/assets/ru-ipv4.txt"));

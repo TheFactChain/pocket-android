@@ -4,7 +4,7 @@ $taskOriginalRoot = Split-Path $PSScriptRoot -Parent
 $taskTag = 'v1.14.4'
 $taskCommit = 'c005f35300ce76427dc285481ec5695f5b179cd2'
 $taskPatchName = 'libbox-pocket.patch'
-$taskPatchSHA256 = '37a141a6523cf47982612161f0d21c268ca48584dae18b723df3603ee0e278a3'
+$taskPatchSHA256 = 'd5362d193bc04754ffd3ed01ca72eae928989d09d0ffbe32ba69b24868bac245'
 $taskTags = 'with_gvisor,with_quic,with_utls,badlinkname,tfogo_checklinkname0'
 $taskLinkerFlags = '-X github.com/sagernet/sing-box/constant.Version=1.14.4 -X runtime.godebugDefault=multipathtcp=0,tlssha1=1 -checklinkname=0 -s -w -buildid='
 $taskDriveLetter = [char[]](82..90) | Where-Object { -not (Test-Path -LiteralPath "${_}:\") } | Select-Object -First 1

@@ -23,7 +23,11 @@ import java.util.Set;
 
 import io.nekohasekai.libbox.*;
 
-/** Android resources for one core lifetime; stop the core before closing this adapter. */
+/**
+ * Android resources for one core lifetime; stop the core before closing this adapter.
+ * Without a VpnService (the server check process) core sockets are bound to the physical network instead of
+ * protected, and no TUN can be opened.
+ */
 public final class AndroidPlatform implements PlatformInterface, AutoCloseable {
     private final VpnService service;
     private final ConnectivityManager connectivity;
@@ -35,9 +39,11 @@ public final class AndroidPlatform implements PlatformInterface, AutoCloseable {
     private ParcelFileDescriptor tun;
     private volatile boolean closed;
 
-    public AndroidPlatform(VpnService service) {
+    public AndroidPlatform(VpnService service) { this(service, service); }
+
+    public AndroidPlatform(android.content.Context context, VpnService service) {
         this.service = service;
-        connectivity = Objects.requireNonNull(service.getSystemService(ConnectivityManager.class));
+        connectivity = Objects.requireNonNull(context.getSystemService(ConnectivityManager.class));
         callback = new ConnectivityManager.NetworkCallback() {
             @Override public void onAvailable(Network network) { refreshNetwork(null); }
             @Override public void onLost(Network network) { refreshNetwork(network); }
@@ -151,12 +157,20 @@ public final class AndroidPlatform implements PlatformInterface, AutoCloseable {
 
     @Override public void autoDetectInterfaceControl(int fd) throws IOException {
         requireOpen();
-        if (!service.protect(fd)) throw new IOException("Could not protect core socket");
+        if (service != null) {
+            if (!service.protect(fd)) throw new IOException("Could not protect core socket");
+            return;
+        }
+        Network network = getUnderlyingNetwork();
+        if (network == null) throw new IOException("No physical Internet network");
+        // The duplicate shares the socket, so binding it binds the core's socket; only the duplicate is closed.
+        try (ParcelFileDescriptor socket = ParcelFileDescriptor.fromFd(fd)) { network.bindSocket(socket.getFileDescriptor()); }
     }
 
     @Override public int openTun(TunOptions options) throws Exception {
         synchronized (lock) {
             requireOpen();
+            if (service == null) throw new IllegalStateException("No VPN service for a TUN");
             if (tun != null) throw new IllegalStateException("TUN already established for this core");
             if (underlyingNetwork == null) throw new IOException("No physical Internet network");
             if (options.getMTU() < 1280) throw new IllegalArgumentException("IPv6 TUN requires MTU >= 1280");

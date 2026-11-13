@@ -20,6 +20,7 @@ import net.typeblog.shelter.connections.Subscription;
 import net.typeblog.shelter.services.IPocketVpnService;
 import net.typeblog.shelter.ui.OpenPocketActivity;
 import io.nekohasekai.libbox.*;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.net.InetAddress;
@@ -122,20 +123,71 @@ public class PocketVpnService extends VpnService {
             });
         }
         @Override public void refreshDueSubscriptions() { network.execute(PocketVpnService.this::refreshDue); }
-        @Override public String pingConnections(String subscriptionId) {
-            List<ConnectionProfile> servers = call(() -> {
-                List<ConnectionProfile> chosen = new java.util.ArrayList<>();
-                for (ConnectionProfile value : requireStore().all()) if (value.subscription.equals(subscriptionId)) chosen.add(value);
+        @Override public String pingConnections(String subscriptionId, boolean force) {
+            JSONArray servers = call(() -> {
+                JSONArray chosen = new JSONArray();
+                for (ConnectionProfile value : requireStore().all()) {
+                    if (value.subscription.equals(subscriptionId)) chosen.put(new JSONObject().put("id", value.id).put("outbound", value.toOutbound()));
+                }
                 return chosen;
             });
-            Network real = call(() -> platform != null ? platform.getUnderlyingNetwork() : null);
-            if (real == null) real = getSystemService(android.net.ConnectivityManager.class).getActiveNetwork();
+            long now = android.os.SystemClock.elapsedRealtime();
             JSONObject result = new JSONObject();
-            try { for (java.util.Map.Entry<String, Long> entry : ServerPing.all(PocketVpnService.this, real, servers).entrySet()) result.put(entry.getKey(), entry.getValue()); }
-            catch (org.json.JSONException ignored) { }
-            return result.toString();
+            try {
+                synchronized (pings) {
+                    boolean fresh = !force && servers.length() > 0;
+                    for (int i = 0; i < servers.length(); i++) {
+                        long[] known = pings.get(servers.getJSONObject(i).getString("id"));
+                        if (known == null || now - known[1] > PING_CACHE_MS) { fresh = false; break; }
+                        result.put(servers.getJSONObject(i).getString("id"), known[0]);
+                    }
+                    if (fresh || servers.length() == 0) return result.toString();
+                }
+                Network real = call(() -> platform != null ? platform.getUnderlyingNetwork() : null);
+                if (real == null) real = getSystemService(android.net.ConnectivityManager.class).getActiveNetwork();
+                if (real == null) throw new IllegalStateException("Нет сети для проверки серверов.");
+                JSONObject measured = new JSONObject(checkServers(new JSONObject().put("network", real.getNetworkHandle())
+                        .put("servers", servers).toString()));
+                synchronized (pings) {
+                    for (java.util.Iterator<String> keys = measured.keys(); keys.hasNext();) {
+                        String id = keys.next();
+                        pings.put(id, new long[]{measured.getLong(id), now});
+                    }
+                }
+                return measured.toString();
+            } catch (org.json.JSONException e) {
+                throw new IllegalStateException("Проверка серверов не выполнена.");
+            }
         }
     };
+
+    private static final long PING_CACHE_MS = 10 * 60_000L;
+    /** Last check per server id: {delay ms or -1, elapsedRealtime of the check}. */
+    private final java.util.Map<String, long[]> pings = new java.util.HashMap<>();
+
+    /** Runs the request through each server in the separate «:ping» process (see PingService). */
+    private String checkServers(String request) {
+        java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(1);
+        net.typeblog.shelter.services.IPocketPing[] remote = new net.typeblog.shelter.services.IPocketPing[1];
+        android.content.ServiceConnection connection = new android.content.ServiceConnection() {
+            @Override public void onServiceConnected(android.content.ComponentName name, IBinder service) {
+                remote[0] = net.typeblog.shelter.services.IPocketPing.Stub.asInterface(service);
+                ready.countDown();
+            }
+            @Override public void onServiceDisconnected(android.content.ComponentName name) { }
+        };
+        if (!bindService(new Intent(this, PingService.class), connection, BIND_AUTO_CREATE)) {
+            throw new IllegalStateException("Проверка серверов не запустилась.");
+        }
+        try {
+            if (!ready.await(10, TimeUnit.SECONDS) || remote[0] == null) throw new IllegalStateException("Проверка серверов не запустилась.");
+            return remote[0].test(request);
+        } catch (InterruptedException | android.os.RemoteException e) {
+            throw new IllegalStateException("Проверка серверов прервалась.");
+        } finally {
+            unbindService(connection);
+        }
+    }
 
     // shortcut: fixed client names; if a panel blocks them too, add a per-subscription choice of client.
     private static final String[] SUBSCRIPTION_AGENTS = {"Happ/3.11.0", "v2rayNG/1.10.16",
@@ -224,7 +276,7 @@ public class PocketVpnService extends VpnService {
     private List<String> russianNetworks;
 
     /** «Российские сайты напрямую»: on by default, as in Pocket Windows. */
-    private boolean directRu() { return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_DIRECT_RU, true); }
+    private boolean directRu() { return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_DIRECT_RU, false); }
 
     private List<String> russianNetworks() throws java.io.IOException {
         if (russianNetworks == null) {
@@ -257,8 +309,15 @@ public class PocketVpnService extends VpnService {
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (!ProtectionPolicy.isOwner(this)) { stopSelf(); return START_NOT_STICKY; }
-        showNotification("Pocket проверяет защиту рабочего профиля");
-        worker.execute(() -> { if (!closed) restart(); });
+        showNotification(client != null ? statusText(store == null ? null : store.selected()) : "Pocket проверяет защиту рабочего профиля");
+        worker.execute(() -> {
+            if (closed) return;
+            // Opening Pocket starts the service again; a tunnel already running the selected server is kept,
+            // so work apps do not lose their connections and Pocket does not wait for a new handshake.
+            ConnectionProfile selected = store == null ? null : store.selected();
+            if (selected != null && client != null && selected.id.equals(runningId)) { publish(); return; }
+            restart();
+        });
         return START_STICKY;
     }
 
@@ -467,9 +526,12 @@ public class PocketVpnService extends VpnService {
                     .put("lastCheckTime",lastCheckTime).put("lastCheckElapsed",health.verifiedElapsed()).put("error",error)
                     .put("profileSerial",getSystemService(UserManager.class).getSerialNumberForUser(Process.myUserHandle()));
             snapshot=value.toString();
-            showNotification(!ProtectionPolicy.confirmed(this)?"Защита не подтверждена. Открой Pocket":
-                    ("CONNECTED".equals(connectionState)?"Подключено: "+(selected==null?"":selected.name):"Интернет рабочих приложений заблокирован до подключения"));
+            showNotification(statusText(selected));
         } catch(Exception ignored) {}
+    }
+    private String statusText(ConnectionProfile selected) {
+        return !ProtectionPolicy.confirmed(this)?"Защита не подтверждена. Открой Pocket":
+                ("CONNECTED".equals(connectionState)?"Подключено: "+(selected==null?"":selected.name):"Интернет рабочих приложений заблокирован до подключения");
     }
     private void showNotification(String text) {
         if(!ProtectionPolicy.isOwner(this))return;

@@ -13,5 +13,5 @@ interface IPocketVpnService {
     String refreshSubscription(String id, boolean allowDevice);
     void deleteSubscription(String id);
     void refreshDueSubscriptions();
-    String pingConnections(String subscriptionId);
+    String pingConnections(String subscriptionId, boolean force);
 }

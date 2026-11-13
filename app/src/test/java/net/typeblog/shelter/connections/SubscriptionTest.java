@@ -73,7 +73,9 @@ public class SubscriptionTest {
                         .put("users", new JSONArray().put(new JSONObject().put("id", USER).put("encryption", "none").put("flow", "xtls-rprx-vision"))))))
                 .put("streamSettings", new JSONObject().put("network", "tcp").put("security", "reality")
                         .put("realitySettings", new JSONObject().put("serverName", "www.example.com").put("publicKey", KEY)
-                                .put("shortId", "ab").put("fingerprint", "chrome").put("spiderX", "/"))));
+                                .put("shortId", "ab").put("fingerprint", "chrome").put("spiderX", "/"))
+                        .put("finalmask", new JSONObject().put("tcp", new JSONArray().put(new JSONObject().put("type", "fragment")
+                                .put("settings", new JSONObject().put("packets", "tlshello").put("length", "10-20")))))));
         JSONObject grpc = xray("Russia YouTube", new JSONObject().put("protocol", "vless")
                 .put("settings", new JSONObject().put("vnext", new JSONArray().put(new JSONObject().put("address", "ru.example").put("port", "8443")
                         .put("users", new JSONArray().put(new JSONObject().put("id", USER).put("encryption", "none"))))))
@@ -105,7 +107,10 @@ public class SubscriptionTest {
         ConnectionProfile at = result.profiles.get(0);
         assertEquals("Austria", at.name);
         assertEquals("xtls-rprx-vision", at.flow);
+        assertTrue("The provider's hello fragmentation is kept", at.toOutbound().getJSONObject("tls").getBoolean("fragment"));
+        assertTrue(ConnectionProfile.fromJson(at.toJson()).fragment);
         ConnectionProfile ru = result.profiles.get(1);
+        assertFalse(ru.toOutbound().getJSONObject("tls").has("fragment"));
         assertEquals(8443, ru.port);
         assertEquals("yt", ru.path);
         ConnectionProfile hy = result.profiles.get(2);

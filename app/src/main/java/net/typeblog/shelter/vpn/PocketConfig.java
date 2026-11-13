@@ -38,6 +38,9 @@ public final class PocketConfig {
                     // The internet is IPv4 only, as in Windows: apps fall back from IPv6 at once.
                     .put(new JSONObject().put("ip_version", 6).put("action", "reject"));
             if (!profile.udpSupported()) rules.put(new JSONObject().put("network", "udp").put("action", "reject"));
+            // Xray clients refuse QUIC (UDP/443) under XTLS Vision and Vision servers do not carry it, so browsers
+            // waited on a silent QUIC attempt; refusing it at once makes them use TCP right away, as with Happ.
+            else if (!outbound.optString("flow").isEmpty()) rules.put(new JSONObject().put("network", "udp").put("port", 443).put("action", "reject"));
             JSONArray outbounds = new JSONArray().put(outbound);
             JSONObject route = new JSONObject().put("auto_detect_interface", true).put("final", "proxy");
             if (directRu != null) {

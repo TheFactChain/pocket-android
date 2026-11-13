@@ -104,6 +104,7 @@ final class ConnectionsPage extends Page {
             JSONObject sub = a.subscriptionList.optJSONObject(i);
             if (sub != null) known.add(sub.optString("id"));
         }
+        int manual = 0;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null || known.contains(item.optString("subscription"))) continue;
@@ -112,13 +113,34 @@ final class ConnectionsPage extends Page {
             boolean editable = ConnectionProfile.UI_TYPES.contains(type);
             RowView row = serverRow(item, isSelected);
             row.setCaption(item.optString("details", type) + ", " + item.optString("server"));
-            row.setEnd(textAction(editable ? "Изменить" : "Удалить", v -> {
+            LinearLayout end = new LinearLayout(a);
+            end.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView pill = pingPill(id);
+            if (pill != null) {
+                pill.setOnClickListener(v -> ping("", true));
+                end.addView(pill);
+            }
+            end.addView(textAction(editable ? "Изменить" : "Удалить", v -> {
                 if (editable) edit(id); else confirmDelete(id, name, isSelected);
             }));
+            row.setEnd(end);
+            manual++;
             // Each connection brings its own top line; «Добавить» adds the line under the last one.
             separator(list);
             list.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
+        if (manual > 0) {
+            RowView check = new RowView(a);
+            check.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
+            check.setTitle("Проверить задержку");
+            check.setCaption("Запрос через каждое подключение, как в Happ");
+            check.setEnd(textAction(pinging.contains("") ? "Пинг…" : "Пинг", v -> ping("", true)));
+            check.setOnClickListener(v -> ping("", true));
+            separator(list);
+            list.addView(check, new LinearLayout.LayoutParams(-1, -2));
+        }
+        // Checks start after this pass: ping() redraws the list itself.
+        if (manual > 0 && !pinged.contains("")) a.post(() -> ping("", false));
         for (int i = 0; i < a.subscriptionList.length(); i++) {
             JSONObject sub = a.subscriptionList.optJSONObject(i);
             if (sub != null) renderSubscription(sub, items, selected);
@@ -201,7 +223,7 @@ final class ConnectionsPage extends Page {
         top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         boolean busy = refreshing.contains(subId);
         top.addView(textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title, false)));
-        top.addView(textAction(pinging.contains(subId) ? "Пинг…" : "Пинг", v -> ping(subId)));
+        top.addView(textAction(pinging.contains(subId) ? "Пинг…" : "Пинг", v -> ping(subId, true)));
         top.addView(textAction("Ещё", v -> subscriptionMenu(sub)));
 
         long updated = sub.optLong("updated");
@@ -263,13 +285,8 @@ final class ConnectionsPage extends Page {
             boolean isSelected = item.optString("id").equals(selected);
             RowView row = serverRow(item, isSelected);
             row.setCaption(item.optString("details"));
-            Long ms = pings.get(item.optString("id"));
-            if (ms != null) {
-                boolean good = ms > 0 && ms <= 150, ok = ms > 150 && ms <= 400;
-                row.setPill(ms > 0 ? ms + " мс" : ms == -2 ? "скрыт" : "нет ответа",
-                        a.color(good ? R.color.green_soft : ok ? R.color.orange_soft : ms > 0 ? R.color.danger_soft : R.color.grey_soft),
-                        a.color(good ? R.color.green_ink : ok ? R.color.orange_ink : ms > 0 ? R.color.danger : R.color.muted));
-            }
+            TextView pill = pingPill(item.optString("id"));
+            if (pill != null) row.setEnd(pill);
             separator(card);
             card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
@@ -277,7 +294,7 @@ final class ConnectionsPage extends Page {
             separator(card);
             TextView empty = small(card, "В подписке пока нет серверов, которые Pocket умеет подключать.", R.color.muted);
             empty.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
-        } else if (!pinged.contains(subId)) ping(subId);
+        } else if (!pinged.contains(subId)) a.post(() -> ping(subId, false));
         // What the provider listed but Pocket cannot connect yet is shown, not dropped silently.
         String skipped = sub.optString("skipped");
         if (!skipped.isEmpty()) {
@@ -306,7 +323,20 @@ final class ConnectionsPage extends Page {
         return Math.round(value / 1048576.0) + " МБ";
     }
 
-    private void ping(String subId) {
+    /** Delay of a request through the server (see PingService), or null before the first check. */
+    private TextView pingPill(String id) {
+        Long ms = pings.get(id);
+        if (ms == null) return null;
+        boolean good = ms > 0 && ms <= 300, ok = ms > 300 && ms <= 800;
+        TextView pill = RowView.pill(a, ms > 0 ? ms + " мс" : "нет связи",
+                a.color(good ? R.color.green_soft : ok ? R.color.orange_soft : ms > 0 ? R.color.danger_soft : R.color.grey_soft),
+                a.color(good ? R.color.green_ink : ok ? R.color.orange_ink : ms > 0 ? R.color.danger : R.color.muted));
+        pill.setContentDescription(ms > 0 ? "Запрос через сервер: " + ms + " миллисекунд" : "Запрос через сервер не прошёл");
+        return pill;
+    }
+
+    /** @param force check again even if the VPN process has a result from the last ten minutes. */
+    private void ping(String subId, boolean force) {
         if (pinging.contains(subId) || a.mServiceWork == null) return;
         pinging.add(subId);
         pinged.add(subId);
@@ -314,7 +344,7 @@ final class ConnectionsPage extends Page {
         IShelterService work = a.mServiceWork;
         a.worker.execute(() -> {
             JSONObject result = null;
-            try { result = new JSONObject(work.pingConnections(subId)); } catch (Exception ignored) { }
+            try { result = new JSONObject(work.pingConnections(subId, force)); } catch (Exception ignored) { }
             JSONObject values = result;
             a.post(() -> {
                 pinging.remove(subId);

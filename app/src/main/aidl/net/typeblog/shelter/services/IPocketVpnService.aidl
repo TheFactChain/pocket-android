@@ -8,6 +8,8 @@ interface IPocketVpnService {
     void deleteConnection(String id);
     void setDirectRu(boolean enabled);
     void checkNow();
+    void setIpControl(boolean enabled, int minutes);
+    void confirmIp();
     String listSubscriptions();
     String addSubscription(String url, boolean allowDevice);
     String refreshSubscription(String id, boolean allowDevice);

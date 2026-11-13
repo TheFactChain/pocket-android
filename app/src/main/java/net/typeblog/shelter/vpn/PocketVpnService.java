@@ -54,8 +54,14 @@ public class PocketVpnService extends VpnService {
     private Network lastNetwork;
     private CommandServer server;
     private CommandClient client;
-    private ScheduledFuture<?> restartTask, probeTask, probeDeadline;
-    private boolean nativeReady;
+    private ScheduledFuture<?> restartTask, probeTask, probeDeadline, ipTask;
+    private volatile String ipStatus = "", ipObserved = "";
+    private boolean nativeReady, xrayRunning;
+
+    private static String firstIpv4(InetAddress[] addresses) {
+        for (InetAddress address : addresses) if (address instanceof java.net.Inet4Address) return address.getHostAddress();
+        throw new IllegalStateException("Server DNS unavailable");
+    }
 
     private final IPocketVpnService.Stub binder = new IPocketVpnService.Stub() {
         @Override public boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
@@ -75,7 +81,15 @@ public class PocketVpnService extends VpnService {
             });
         }
         @Override public void activateConnection(String id) {
-            call(() -> { ProtectionPolicy.ensure(PocketVpnService.this); requireStore().select(id); cancelRestart(); stopCore(); retries=0; addressCursor=0; startSelected(); return null; });
+            call(() -> {
+                ProtectionPolicy.ensure(PocketVpnService.this);
+                boolean other = !id.equals(requireStore().selectedId());
+                store.select(id);
+                // The user confirmed switching to another server, so its address becomes the one to keep;
+                // choosing the same server again never accepts a changed address.
+                if (other) { prefs().edit().remove(PREF_IP_CONFIRMED).remove(PREF_IP_PENDING).commit(); ipStatus = ""; }
+                cancelRestart(); stopCore(); retries=0; addressCursor=0; startSelected(); return null;
+            });
         }
         @Override public void deleteConnection(String id) {
             call(() -> {
@@ -91,6 +105,26 @@ public class PocketVpnService extends VpnService {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_DIRECT_RU, enabled).commit();
                 if (store != null && store.selected() != null) { cancelRestart(); stopCore(); retries=0; startSelected(); }
                 publish(); return null;
+            });
+        }
+        @Override public void setIpControl(boolean enabled, int minutes) {
+            call(() -> {
+                if (minutes < 1 || minutes > 1440) throw new IllegalArgumentException("Интервал: от 1 до 1440 минут");
+                boolean wasBlocked = ipBlocked();
+                prefs().edit().putBoolean(PREF_IP_CONTROL, enabled).putInt(PREF_IP_MINUTES, minutes).commit();
+                if (!enabled) { prefs().edit().remove(PREF_IP_PENDING).commit(); ipStatus = ""; }
+                if (wasBlocked && !enabled) { cancelRestart(); stopCore(); retries=0; startSelected(); }
+                else if (enabled && client != null) scheduleIpCheck(generation, 0);
+                publish(); return null;
+            });
+        }
+        @Override public void confirmIp() {
+            call(() -> {
+                String pending = prefs().getString(PREF_IP_PENDING, "");
+                if (pending.isEmpty()) return null;
+                prefs().edit().putString(PREF_IP_CONFIRMED, pending).remove(PREF_IP_PENDING).commit();
+                ipStatus = "OK"; ipObserved = pending;
+                cancelRestart(); stopCore(); retries=0; startSelected(); return null;
             });
         }
         @Override public void checkNow() {
@@ -277,6 +311,75 @@ public class PocketVpnService extends VpnService {
 
     /** «Российские сайты напрямую»: on by default, as in Pocket Windows. */
     private boolean directRu() { return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_DIRECT_RU, false); }
+    private static final String PREF_IP_CONTROL = "ip_control", PREF_IP_MINUTES = "ip_minutes",
+            PREF_IP_CONFIRMED = "ip_confirmed", PREF_IP_PENDING = "ip_pending";
+    private android.content.SharedPreferences prefs() { return getSharedPreferences(PREFS, MODE_PRIVATE); }
+    private boolean ipBlocked() { return prefs().getBoolean(PREF_IP_CONTROL, false) && !prefs().getString(PREF_IP_PENDING, "").isEmpty(); }
+    private String ipChangedText() {
+        String was = prefs().getString(PREF_IP_CONFIRMED, ""), now = prefs().getString(PREF_IP_PENDING, "");
+        return "Внешний IP изменился" + (was.isEmpty() ? "" : " с " + was) + " на " + now + ". Интернет копий закрыт: подтверди новый адрес в Настройках Pocket.";
+    }
+
+    private void scheduleIpCheck(int ticket, long delay) {
+        if (!prefs().getBoolean(PREF_IP_CONTROL, false) || closed) return;
+        if (ipTask != null) ipTask.cancel(false);
+        ipTask = worker.schedule(() -> checkIp(ticket), delay, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Address of the protected exit as one service sees it, through Pocket's own tunnel. Android may delay
+     * the timer while the phone sleeps; no wake lock is held for it. Provider rules that send some sites
+     * through other exits are not covered by one address.
+     */
+    private void checkIp(int ticket) {
+        if (closed || ticket != generation || client == null || !prefs().getBoolean(PREF_IP_CONTROL, false)) return;
+        long interval = prefs().getInt(PREF_IP_MINUTES, 30) * 60_000L;
+        if (!"CONNECTED".equals(connectionState)) { scheduleIpCheck(ticket, Math.min(interval, 5000)); return; }
+        // The request runs off the worker so binder calls are never held up by a slow check service.
+        network.execute(() -> {
+            String ip = null;
+            try { ip = publicIp(); } catch (Exception ignored) { }
+            String seen = ip;
+            if (!closed) worker.execute(() -> ipChecked(ticket, seen, interval));
+        });
+    }
+
+    private void ipChecked(int ticket, String ip, long interval) {
+        if (closed || ticket != generation || client == null || !prefs().getBoolean(PREF_IP_CONTROL, false)) return;
+        if (ip == null) { ipStatus = "UNCONFIRMED"; publish(); scheduleIpCheck(ticket, Math.min(interval, 60_000)); return; }
+        ipObserved = ip;
+        String confirmed = prefs().getString(PREF_IP_CONFIRMED, "");
+        // shortcut: the first address seen after enabling is kept as the one to hold; the owner has not decided this yet.
+        if (confirmed.isEmpty()) { prefs().edit().putString(PREF_IP_CONFIRMED, ip).commit(); confirmed = ip; }
+        if (confirmed.equals(ip)) { ipStatus = "OK"; publish(); scheduleIpCheck(ticket, interval); return; }
+        prefs().edit().putString(PREF_IP_PENDING, ip).commit();
+        ipStatus = "CHANGED";
+        cancelRestart(); stopCore();
+        connectionState = "IP_CHANGED"; error = ipChangedText(); publish();
+    }
+
+    private String publicIp() throws Exception {
+        android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+        Network tunnel = null;
+        for (Network network : cm.getAllNetworks()) {
+            android.net.NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+            if (caps == null || !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) continue;
+            // Android 10 does not tell the owner; in the work profile the only VPN is Pocket's, which is then the active network.
+            if (android.os.Build.VERSION.SDK_INT >= 30 ? caps.getOwnerUid() == Process.myUid() : network.equals(cm.getActiveNetwork())) tunnel = network;
+        }
+        if (tunnel == null) return null;
+        java.net.HttpURLConnection connection = (java.net.HttpURLConnection) tunnel.openConnection(new java.net.URL("https://api.ipify.org"));
+        connection.setConnectTimeout(8000); connection.setReadTimeout(8000); connection.setUseCaches(false);
+        try (java.io.InputStream in = connection.getInputStream()) {
+            byte[] data = new byte[64]; int length = 0;
+            for (int n; length < data.length && (n = in.read(data, length, data.length - length)) > 0;) length += n;
+            String text = new String(data, 0, length, java.nio.charset.StandardCharsets.US_ASCII).trim();
+            // Only an address literal counts; anything else is «not confirmed», never a change.
+            boolean literal = text.matches("(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])")
+                    || (text.contains(":") && text.matches("[0-9a-fA-F:]{2,45}") && InetAddress.getByName(text) instanceof java.net.Inet6Address);
+            return literal ? text : null;
+        } finally { connection.disconnect(); }
+    }
 
     private List<String> russianNetworks() throws java.io.IOException {
         if (russianNetworks == null) {
@@ -374,6 +477,8 @@ public class PocketVpnService extends VpnService {
             ConnectionProfile selected = store.selected();
             if (selected == null) { connectionState="NO_SELECTION"; error=""; publish(); return; }
             if (!getSystemService(UserManager.class).isUserUnlocked()) throw new IllegalStateException("Profile locked");
+            // A detected address change keeps the internet closed until the user confirms it.
+            if (ipBlocked()) { connectionState="IP_CHANGED"; error=ipChangedText(); publish(); return; }
             initializeNative();
             platform = new AndroidPlatform(this);
             lastNetwork = platform.getUnderlyingNetwork();
@@ -390,8 +495,22 @@ public class PocketVpnService extends VpnService {
             // Only the VPN server's hostname is resolved outside the tunnel.
             InetAddress[] addresses = lastNetwork.getAllByName(selected.server);
             if (addresses.length == 0) throw new IllegalStateException("Server DNS unavailable");
-            String configuration = PocketConfig.create(selected, addresses[Math.floorMod(addressCursor++,addresses.length)].getHostAddress(),
-                    directRu() ? russianNetworks() : null);
+            String resolved = addresses[Math.floorMod(addressCursor++,addresses.length)].getHostAddress();
+            JSONObject carrier = null;
+            if (selected.type.equals("vless")) {
+                // VLESS is carried by Xray (see XrayConfig); its sockets leave the tunnel as the core's do.
+                Network network = lastNetwork;
+                String user = UUID.randomUUID().toString(), password = UUID.randomUUID().toString();
+                int port;
+                try (java.net.ServerSocket probe = new java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { port = probe.getLocalPort(); }
+                String xray = XrayConfig.create(selected, host -> host.equals(selected.server) ? resolved : firstIpv4(network.getAllByName(host)),
+                        port, user, password);
+                io.nekohasekai.pocketxray.Pocketxray.setProtector(fd -> protect(fd));
+                xrayRunning = true; // set first: stopCore must stop a start that failed halfway
+                io.nekohasekai.pocketxray.Pocketxray.start(xray);
+                carrier = XrayConfig.socksOutbound(port, user, password);
+            }
+            String configuration = PocketConfig.create(selected, resolved, directRu() ? russianNetworks() : null, carrier);
             Libbox.checkConfig(configuration);
             server = Libbox.newCommandServer(serverHandler(), platform);
             server.start();
@@ -403,6 +522,7 @@ public class PocketVpnService extends VpnService {
             client.connect();
             retries=0; probeFailures=0;
             probeTask = worker.schedule(() -> probe(ticket), 1200, TimeUnit.MILLISECONDS);
+            scheduleIpCheck(ticket, 4000);
             publish();
         } catch (Throwable failure) {
             stopCore();
@@ -494,6 +614,8 @@ public class PocketVpnService extends VpnService {
         if(probeTask!=null){probeTask.cancel(false);probeTask=null;}
         if(probeDeadline!=null){probeDeadline.cancel(false);probeDeadline=null;}
         health=new ProbeHealth(); lastCheckTime=0; runningId=null;
+        if(ipTask!=null){ipTask.cancel(false);ipTask=null;}
+        if(xrayRunning){ xrayRunning=false; try{io.nekohasekai.pocketxray.Pocketxray.stop();}catch(Exception ignored){} }
         CommandClient oldClient=client; client=null;
         if(oldClient!=null) try{oldClient.disconnect();}catch(Exception ignored){}
         CommandServer oldServer=server; server=null;
@@ -523,6 +645,9 @@ public class PocketVpnService extends VpnService {
                     .put("connectionState",connectionState).put("selectedId",selected==null?"":selected.id)
                     .put("selectedName",selected==null?"":selected.name).put("runningId",runningId==null?"":runningId)
                     .put("selectedType",selected==null?"":selected.typeLabel()).put("directRu",directRu())
+                    .put("ipControl",prefs().getBoolean(PREF_IP_CONTROL,false)).put("ipMinutes",prefs().getInt(PREF_IP_MINUTES,30))
+                    .put("ipStatus",ipStatus).put("ipObserved",ipObserved).put("ipConfirmed",prefs().getString(PREF_IP_CONFIRMED,""))
+                    .put("ipPending",prefs().getString(PREF_IP_PENDING,""))
                     .put("lastCheckTime",lastCheckTime).put("lastCheckElapsed",health.verifiedElapsed()).put("error",error)
                     .put("profileSerial",getSystemService(UserManager.class).getSerialNumberForUser(Process.myUserHandle()));
             snapshot=value.toString();

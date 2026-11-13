@@ -63,15 +63,23 @@ final class XrayImport {
         if (proxy == null) throw invalid("в конфигурации нет сервера.");
         JSONObject stream = proxy.optJSONObject("streamSettings");
         if (stream == null) stream = new JSONObject();
-        JSONObject sockopt = stream.optJSONObject("sockopt");
-        if ((sockopt != null && !sockopt.optString("dialerProxy").isEmpty()) || proxy.has("proxySettings")) {
-            throw invalid("цепочки серверов (Double VPN) пока не поддерживаются.");
+        String protocol = proxy.optString("protocol");
+        // VLESS runs on the Xray core with the provider's outbounds as served (mux, masks, Double VPN chains).
+        JSONArray chain = new JSONArray().put(proxy);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String next = dialer(proxy); !next.isEmpty(); next = dialer(chain.optJSONObject(chain.length() - 1))) {
+            if (!protocol.equals("vless")) throw invalid("цепочки серверов (Double VPN) поддерживаются только для VLESS.");
+            JSONObject hop = null;
+            for (int i = 0; outbounds != null && i < outbounds.length(); i++) {
+                JSONObject outbound = outbounds.optJSONObject(i);
+                if (outbound != null && next.equals(outbound.optString("tag"))) hop = outbound;
+            }
+            if (hop == null || !seen.add(next) || chain.length() > 4) throw invalid("цепочка серверов (Double VPN) ссылается на неизвестный сервер.");
+            chain.put(hop);
         }
-        // Xray mux is only an optimisation: servers accept the same user without it.
         try {
-            String protocol = proxy.optString("protocol");
             JSONObject flat;
-            if (protocol.equals("vless")) flat = vless(proxy.getJSONObject("settings"), stream);
+            if (protocol.equals("vless")) flat = vless(proxy.getJSONObject("settings"), stream).put("xray", chain.toString());
             else if (protocol.equals("hysteria") || protocol.equals("hysteria2")) flat = hysteria(proxy.getJSONObject("settings"), stream);
             else throw invalid("протокол " + label(protocol) + " пока не поддерживается.");
             if (!remarks.isEmpty()) flat.put("name", remarks.length() > 256 ? remarks.substring(0, 256) : remarks);
@@ -79,6 +87,15 @@ final class XrayImport {
         } catch (JSONException e) {
             throw invalid("некорректные поля сервера.");
         }
+    }
+
+    /** Tag of the outbound this one dials through, or empty. */
+    private static String dialer(JSONObject outbound) {
+        JSONObject stream = outbound.optJSONObject("streamSettings");
+        JSONObject sockopt = stream == null ? null : stream.optJSONObject("sockopt");
+        String tag = sockopt == null ? "" : sockopt.optString("dialerProxy");
+        JSONObject proxySettings = outbound.optJSONObject("proxySettings");
+        return tag.isEmpty() && proxySettings != null ? proxySettings.optString("tag") : tag;
     }
 
     private static JSONObject vless(JSONObject settings, JSONObject stream) throws JSONException {

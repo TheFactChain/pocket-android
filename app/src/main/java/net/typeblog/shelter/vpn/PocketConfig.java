@@ -26,6 +26,16 @@ public final class PocketConfig {
 
     /** @param carrier outbound used instead of the profile's own, e.g. the SOCKS hand-off to Xray (see XrayConfig). */
     public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu, JSONObject carrier) {
+        return create(profile, resolvedServer, directRu, carrier, null);
+    }
+
+    /** One app's own connection: its packages, the outbound (tag set) and the profile it carries. */
+    public static final class AppRoute {
+        final List<String> packages; final JSONObject outbound; final ConnectionProfile profile;
+        public AppRoute(List<String> packages, JSONObject outbound, ConnectionProfile profile) { this.packages = packages; this.outbound = outbound; this.profile = profile; }
+    }
+
+    public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu, JSONObject carrier, List<AppRoute> apps) {
         // An enabled setting without its list fails closed, as in Windows.
         if (directRu != null && directRu.isEmpty()) throw new IllegalArgumentException("Нет списка российских сетей");
         try {
@@ -47,7 +57,26 @@ public final class PocketConfig {
             // waited on a silent QUIC attempt; refusing it at once makes them use TCP right away, as with Happ.
             else if (!profile.flow.isEmpty()) rules.put(new JSONObject().put("network", "udp").put("port", 443).put("action", "reject"));
             JSONArray outbounds = new JSONArray().put(outbound);
+            JSONArray appRules = new JSONArray();
+            // Apps with their own connection are matched first, so the default's UDP rules do not apply to them.
+            for (int i = 0; apps != null && i < apps.size(); i++) {
+                AppRoute app = apps.get(i);
+                JSONArray names = new JSONArray(app.packages);
+                // Its own connection could not start: the app stays closed rather than leaving through another exit.
+                if (app.outbound == null) { appRules.put(new JSONObject().put("package_name", names).put("action", "reject")); continue; }
+                if (!app.profile.udpSupported()) appRules.put(new JSONObject().put("package_name", names).put("network", "udp").put("action", "reject"));
+                else if (!app.profile.flow.isEmpty()) appRules.put(new JSONObject().put("package_name", names).put("network", "udp").put("port", 443).put("action", "reject"));
+                appRules.put(new JSONObject().put("package_name", names).put("outbound", app.outbound.getString("tag")));
+                outbounds.put(app.outbound);
+            }
+            if (appRules.length() > 0) {
+                JSONArray ordered = new JSONArray().put(rules.get(0)).put(rules.get(1));
+                for (int i = 0; i < appRules.length(); i++) ordered.put(appRules.get(i));
+                for (int i = 2; i < rules.length(); i++) ordered.put(rules.get(i));
+                rules = ordered;
+            }
             JSONObject route = new JSONObject().put("auto_detect_interface", true).put("final", "proxy");
+            if (appRules.length() > 0) route.put("find_process", true);
             if (directRu != null) {
                 // Only TCP to a Russian address leaves directly; UDP (WebRTC, QUIC), DNS ports and IP echo services keep the proxy.
                 JSONArray echo = new JSONArray();

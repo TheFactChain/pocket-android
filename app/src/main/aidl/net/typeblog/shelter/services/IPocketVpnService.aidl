@@ -10,6 +10,9 @@ interface IPocketVpnService {
     void checkNow();
     void setIpControl(boolean enabled, int minutes);
     void confirmIp();
+    void setAppConnection(String packageName, String connectionId);
+    String diagnose();
+    void checkExitIp();
     String listSubscriptions();
     String addSubscription(String url, boolean allowDevice);
     String refreshSubscription(String id, boolean allowDevice);

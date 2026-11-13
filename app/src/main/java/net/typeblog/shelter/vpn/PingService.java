@@ -36,7 +36,8 @@ import io.nekohasekai.libbox.*;
  */
 public final class PingService extends Service {
     static final long FAILED = -1;
-    private static final int WAIT_SECONDS = 20;
+    // A server that has not answered in this time is shown as «no answer»; it no longer holds up the rest.
+    private static final int WAIT_SECONDS = 8;
     private static boolean nativeReady;
 
     private final IPocketPing.Stub binder = new IPocketPing.Stub() {
@@ -49,12 +50,19 @@ public final class PingService extends Service {
         }
     };
 
+    private android.os.Handler main;
+    private final Runnable end = () -> Process.killProcess(Process.myPid());
+
     @Override public IBinder onBind(Intent intent) { return binder; }
+
+    // The next group's check often binds within the second: it must not land in a process about to end.
+    @Override public void onRebind(Intent intent) { if (main != null) main.removeCallbacks(end); }
 
     @Override public boolean onUnbind(Intent intent) {
         // Nothing else lives in this process; ending it returns the core's memory at once.
-        new android.os.Handler(getMainLooper()).postDelayed(() -> Process.killProcess(Process.myPid()), 1000);
-        return false;
+        if (main == null) main = new android.os.Handler(getMainLooper());
+        main.postDelayed(end, 3000);
+        return true;
     }
 
     private String run(String request) {
@@ -129,7 +137,11 @@ public final class PingService extends Service {
             client.connect();
             client.urlTest("ping");
             done.await(WAIT_SECONDS, TimeUnit.SECONDS);
-            synchronized (delays) { for (Map.Entry<String, Long> entry : delays.entrySet()) result.put(entry.getKey(), entry.getValue()); }
+            synchronized (delays) {
+                for (Map.Entry<String, Long> entry : delays.entrySet()) result.put(entry.getKey(), entry.getValue());
+                // Counts only, no addresses: enough to tell a dead Xray from slow servers.
+                android.util.Log.i("PocketPing", "answered " + delays.size() + "/" + expected + ", xray " + xrayRunning);
+            }
         } catch (Throwable e) {
             android.util.Log.w("PocketPing", "Server check failed: " + e.getClass().getSimpleName());
         } finally {
@@ -149,13 +161,7 @@ public final class PingService extends Service {
     /** Starts one Xray for the VLESS servers; sing-box reaches server i through its SOCKS inbound. */
     private boolean startXray(Network network, JSONArray[] chains, JSONArray outbounds, JSONArray members, Map<String, String> tags, String[] ids) throws Exception {
         int[] ports = new int[chains.length];
-        boolean any = false;
-        for (int i = 0; i < chains.length; i++) {
-            if (chains[i] == null) continue;
-            try (java.net.ServerSocket probe = new java.net.ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { ports[i] = probe.getLocalPort(); }
-            any = true;
-        }
-        if (!any) return false;
+        if (!XrayConfig.pickPorts(chains, ports)) return false;
         go.Seq.setContext(getApplicationContext());
         String user = UUID.randomUUID().toString(), password = UUID.randomUUID().toString();
         java.util.List<Integer> kept = new java.util.ArrayList<>();

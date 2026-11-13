@@ -124,6 +124,39 @@ public class PocketConfigTest {
         assertEquals("s-0", many.getJSONObject("routing").getJSONArray("rules").getJSONObject(0).getString("outboundTag"));
     }
 
+    @Test public void appWithItsOwnConnectionIsMatchedBeforeTheDefault() throws Exception {
+        ConnectionProfile main = ProfileImporter.parse("hy2://pw@vpn.example").profiles.get(0);
+        ConnectionProfile socks = ProfileImporter.parse("socks5://a:b@10.0.0.2").profiles.get(0);
+        JSONObject own = socks.toOutbound().put("server", "10.0.0.2").put("tag", "app-0");
+        JSONObject config = new JSONObject(PocketConfig.create(main, "192.0.2.1", null, null,
+                java.util.Collections.singletonList(new PocketConfig.AppRoute(java.util.Collections.singletonList("com.example.app"), own, socks))));
+        org.json.JSONArray rules = config.getJSONObject("route").getJSONArray("rules");
+        assertTrue(config.getJSONObject("route").getBoolean("find_process"));
+        assertEquals("hijack-dns", rules.getJSONObject(0).getString("action"));
+        assertEquals("reject", rules.getJSONObject(2).getString("action"));
+        assertEquals("udp", rules.getJSONObject(2).getString("network"));
+        assertEquals("app-0", rules.getJSONObject(3).getString("outbound"));
+        assertEquals("com.example.app", rules.getJSONObject(3).getJSONArray("package_name").getString(0));
+        assertEquals(2, config.getJSONArray("outbounds").length());
+        assertEquals("proxy", config.getJSONObject("route").getString("final"));
+        JSONObject closed = new JSONObject(PocketConfig.create(main, "192.0.2.1", null, null,
+                java.util.Collections.singletonList(new PocketConfig.AppRoute(java.util.Collections.singletonList("com.example.app"), null, socks))));
+        JSONObject refused = closed.getJSONObject("route").getJSONArray("rules").getJSONObject(2);
+        assertEquals("An app whose own connection failed stays closed", "reject", refused.getString("action"));
+        assertFalse(refused.has("network"));
+        assertEquals(1, closed.getJSONArray("outbounds").length());
+    }
+
+    @Test public void ipLogsVerdictBecomesRiskAndText() throws Exception {
+        JSONObject rating = net.typeblog.shelter.vpn.IpRating.fromIpLogs(new JSONObject().put("verdict", "vpn_detected")
+                .put("is_hosting", true).put("score", 0.87), "203.0.113.1");
+        assertEquals("high", rating.getString("risk"));
+        assertTrue(rating.getString("summary").contains("хостинг"));
+        assertTrue(rating.getString("summary").contains("87%"));
+        assertEquals("https://iplogs.com/ip/203.0.113.1", rating.getString("url"));
+        assertEquals("unknown", net.typeblog.shelter.vpn.IpRating.fromIpLogs(new JSONObject(), "203.0.113.1").getString("risk"));
+    }
+
     @Test public void directRussianRoutingMatchesWindows() throws Exception {
         ConnectionProfile profile = ProfileImporter.parse("hy2://pw@vpn.example").profiles.get(0);
         java.util.List<String> nets = PocketConfig.parseNetworks(new java.io.FileReader("src/main/assets/ru-ipv4.txt"));

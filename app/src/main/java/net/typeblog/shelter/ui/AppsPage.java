@@ -274,6 +274,7 @@ final class AppsPage extends Page {
         BottomSheetDialog menu = new BottomSheetDialog(a);
         menuRow(group, menu, R.drawable.ic_apps, R.color.pastel_blue, "Открыть", () -> launch(app));
         menuRow(group, menu, R.drawable.ic_add, R.color.pastel_green, "Ярлык на экран", () -> shortcut(app));
+        menuRow(group, menu, R.drawable.ic_route, R.color.pastel_blue, "Подключение: " + connectionName(app.getPackageName()), () -> chooseConnection(app));
         // A system copy runs the personal APK, so it updates together with it.
         if (!app.isSystem()) menuRow(group, menu, R.drawable.ic_download, R.color.pastel_lavender, "Обновить копию", () -> update(app));
         RowView remove = menuRow(group, menu, R.drawable.ic_warning, R.color.pastel_orange, "Удалить копию", () -> confirmRemove(app));
@@ -286,6 +287,33 @@ final class AppsPage extends Page {
     }
 
     private View v() { return grid; }
+
+    /** The app's own connection, or «как у всех» when it follows the selected one. */
+    private String connectionName(String pkg) {
+        String id = a.state == null || a.state.optJSONObject("appConnections") == null ? "" : a.state.optJSONObject("appConnections").optString(pkg);
+        for (int i = 0; !id.isEmpty() && a.connectionList != null && i < a.connectionList.length(); i++) {
+            org.json.JSONObject value = a.connectionList.optJSONObject(i);
+            if (value != null && id.equals(value.optString("id"))) return value.optString("name");
+        }
+        return "как у всех";
+    }
+
+    private void chooseConnection(ApplicationInfoWrapper app) {
+        int count = a.connectionList == null ? 0 : a.connectionList.length();
+        if (count == 0) { a.toast("Сначала добавь подключение на вкладке «Прокси»."); return; }
+        String[] names = new String[count + 1], ids = new String[count + 1];
+        names[0] = "Как у всех (выбранное подключение)"; ids[0] = "";
+        for (int i = 0; i < count; i++) {
+            org.json.JSONObject value = a.connectionList.optJSONObject(i);
+            ids[i + 1] = value.optString("id");
+            names[i + 1] = value.optString("name") + " · " + value.optString("typeLabel");
+        }
+        new AlertDialog.Builder(a).setTitle("Подключение для «" + app.getLabel() + "»")
+                .setItems(names, (d, which) -> a.remote(() -> { a.mServiceWork.setAppConnection(app.getPackageName(), ids[which]); return null; },
+                        x -> { a.toast(which == 0 ? "«" + app.getLabel() + "» идёт через выбранное подключение." : "«" + app.getLabel() + "» идёт через «" + names[which] + "». Переподключаемся…"); a.refreshState(); },
+                        "Не удалось изменить подключение приложения."))
+                .setNegativeButton("Отмена", null).show();
+    }
 
     private RowView menuRow(LinearLayout group, BottomSheetDialog menu, int icon, int tile, String title, Runnable action) {
         if (group.getChildCount() > 0) separator(group);

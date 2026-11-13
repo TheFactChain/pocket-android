@@ -88,6 +88,20 @@ public final class XrayConfig {
     }
 
     /** The sing-box outbound that carries everything into Xray. */
+    /** A distinct free loopback port for each non-null chain; the probes stay open together so no two get the same port. */
+    public static boolean pickPorts(JSONArray[] chains, int[] ports) throws java.io.IOException {
+        java.util.List<java.net.ServerSocket> open = new java.util.ArrayList<>();
+        try {
+            for (int i = 0; i < chains.length; i++) {
+                if (chains[i] == null) continue;
+                java.net.ServerSocket probe = new java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"));
+                open.add(probe);
+                ports[i] = probe.getLocalPort();
+            }
+            return !open.isEmpty();
+        } finally { for (java.net.ServerSocket probe : open) try { probe.close(); } catch (java.io.IOException ignored) { } }
+    }
+
     public static JSONObject socksOutbound(int port, String user, String password) throws JSONException {
         return new JSONObject().put("type", "socks").put("tag", "proxy").put("server", "127.0.0.1").put("server_port", port)
                 .put("version", "5").put("username", user).put("password", password);

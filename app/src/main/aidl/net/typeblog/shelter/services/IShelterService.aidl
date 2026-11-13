@@ -38,6 +38,9 @@ interface IShelterService {
     void setDirectRu(boolean enabled);
     void setIpControl(boolean enabled, int minutes);
     void confirmIp();
+    void setAppConnection(String packageName, String connectionId);
+    String diagnose();
+    void checkExitIp();
     void checkConnectionNow();
     String listSubscriptions();
     String addSubscription(String url, boolean allowDevice);

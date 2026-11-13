@@ -137,6 +137,16 @@ public class PocketVpnService extends VpnService {
                 publish(); return null;
             });
         }
+        @Override public String exportSettings(String password) {
+            if (password == null) throw new IllegalArgumentException("Пароль — не короче 8 символов");
+            String plain = call(() -> exportPayload(requireStore()));
+            return net.typeblog.shelter.connections.SettingsBackup.encrypt(plain, password.toCharArray());
+        }
+        @Override public String importSettings(String file, String password) {
+            if (password == null) throw new IllegalArgumentException("Пароль — не короче 8 символов");
+            String plain = net.typeblog.shelter.connections.SettingsBackup.decrypt(file, password.toCharArray());
+            return call(() -> importPayload(requireStore(), plain));
+        }
         @Override public void confirmIp() {
             call(() -> {
                 String pending = prefs().getString(PREF_IP_PENDING, "");
@@ -576,6 +586,81 @@ public class PocketVpnService extends VpnService {
             if (cause instanceof SecurityException) throw (SecurityException)cause;
             throw new IllegalStateException("Операция Pocket не завершена. Проверь состояние профиля.");
         }
+    }
+
+    private String exportPayload(ProfileStore s) throws JSONException {
+        JSONArray connections = new JSONArray(), subs = new JSONArray();
+        for (ConnectionProfile value : s.all()) connections.put(value.toJson());
+        for (Subscription sub : s.subscriptions()) subs.put(sub.toJson(true));
+        JSONObject apps = new JSONObject();
+        for (java.util.Map.Entry<String, ?> entry : appConnections().getAll().entrySet()) {
+            if (entry.getValue() instanceof String) apps.put(entry.getKey(), entry.getValue());
+        }
+        JSONObject routing = new JSONObject().put("direct_ru", directRu())
+                .put("ip_control", prefs().getBoolean(PREF_IP_CONTROL, false)).put("ip_minutes", prefs().getInt(PREF_IP_MINUTES, 30));
+        return new JSONObject().put("connections", connections).put("subscriptions", subs).put("apps", apps)
+                .put("routing", routing).put("selected", s.selectedId() == null ? "" : s.selectedId()).toString();
+    }
+
+    /** Merge: existing ids win and the current selection is kept; a backup choice is used only when nothing is selected. */
+    private String importPayload(ProfileStore s, String plain) throws Exception {
+        JSONObject root = new JSONObject(plain);
+        // Parse everything first so a damaged file changes nothing.
+        List<Subscription> newSubs = new java.util.ArrayList<>();
+        JSONArray subs = root.optJSONArray("subscriptions");
+        for (int i = 0; subs != null && i < subs.length(); i++) {
+            Subscription sub = Subscription.fromJson(subs.getJSONObject(i));
+            boolean known = s.findSubscription(sub.url) != null;
+            for (Subscription other : s.subscriptions()) known |= other.id.equals(sub.id);
+            if (!known) newSubs.add(sub);
+        }
+        java.util.Set<String> have = new java.util.HashSet<>();
+        for (ConnectionProfile value : s.all()) have.add(value.id);
+        List<ConnectionProfile> newConnections = new java.util.ArrayList<>();
+        JSONArray connections = root.optJSONArray("connections");
+        for (int i = 0; connections != null && i < connections.length(); i++) {
+            ConnectionProfile value = ConnectionProfile.fromJson(connections.getJSONObject(i));
+            if (have.add(value.id)) newConnections.add(value);
+        }
+        for (Subscription sub : newSubs) s.applySubscription(sub, new java.util.ArrayList<>()); // registers it; servers follow by id
+        for (ConnectionProfile value : newConnections) {
+            boolean orphan = !value.subscription.isEmpty();
+            for (Subscription sub : s.subscriptions()) if (sub.id.equals(value.subscription)) orphan = false;
+            s.save(orphan ? value.withIdentity(value.id, "") : value);
+        }
+        int appsAdded = 0;
+        JSONObject apps = root.optJSONObject("apps");
+        for (java.util.Iterator<String> keys = apps == null ? java.util.Collections.<String>emptyIterator() : apps.keys(); keys.hasNext();) {
+            String pkg = keys.next(), id = apps.optString(pkg);
+            if (!pkg.matches("[A-Za-z0-9_.]{1,255}") || !have.contains(id) || !appConnections().getString(pkg, "").isEmpty()) continue;
+            appConnections().edit().putString(pkg, id).commit();
+            appsAdded++;
+        }
+        boolean restart = appsAdded > 0;
+        JSONObject routing = root.optJSONObject("routing");
+        // Routing and IP control change how the current server works, so they come only into an empty setup.
+        if (routing != null && s.selectedId() == null) {
+            if (routing.has("direct_ru") && routing.optBoolean("direct_ru") != directRu()) {
+                prefs().edit().putBoolean(PREF_DIRECT_RU, routing.optBoolean("direct_ru")).commit(); restart = true;
+            }
+            int minutes = routing.optInt("ip_minutes", 0);
+            boolean ip = routing.optBoolean("ip_control", false);
+            if (minutes >= 1 && minutes <= 1440 && (ip != prefs().getBoolean(PREF_IP_CONTROL, false) || minutes != prefs().getInt(PREF_IP_MINUTES, 30))) {
+                prefs().edit().putBoolean(PREF_IP_CONTROL, ip).putInt(PREF_IP_MINUTES, minutes).commit();
+                if (!ip) { prefs().edit().remove(PREF_IP_PENDING).commit(); ipStatus = ""; }
+                restart = true;
+            }
+        }
+        String wanted = root.optString("selected", "");
+        if (s.selectedId() == null && have.contains(wanted)) {
+            ProtectionPolicy.ensure(this);
+            s.select(wanted);
+            prefs().edit().remove(PREF_IP_CONFIRMED).remove(PREF_IP_PENDING).commit(); ipStatus = "";
+            restart = true;
+        }
+        if (restart && s.selected() != null) { cancelRestart(); stopCore(); retries = 0; addressCursor = 0; startSelected(); }
+        publish();
+        return new JSONObject().put("connections", newConnections.size()).put("subscriptions", newSubs.size()).put("apps", appsAdded).toString();
     }
 
     private ProfileStore requireStore() {

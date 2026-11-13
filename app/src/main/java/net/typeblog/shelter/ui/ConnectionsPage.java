@@ -55,35 +55,60 @@ final class ConnectionsPage extends Page {
 
     @Override void build() {
         // Order: buying a proxy, then the user's own proxies, then subscriptions.
+        // The same sunny gradient as the home shop card: the one surface meant to catch the eye.
         LinearLayout shop = group();
-        android.graphics.drawable.GradientDrawable tint = new android.graphics.drawable.GradientDrawable();
-        tint.setColor(a.color(R.color.pastel_lavender));
-        tint.setCornerRadius(a.dp(28));
-        shop.setBackground(tint);
-        RowView buy = row(shop, R.drawable.ic_shield, R.color.accent, "Купить Proxy", "Личный, настроен, с поддержкой");
-        buy.setTitleBold(true).setPadding(a.dp(16), a.dp(14), a.dp(14), a.dp(14));
+        android.graphics.drawable.GradientDrawable sun = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{a.color(R.color.pastel_yellow), a.color(R.color.pastel_orange), a.color(R.color.pastel_pink)});
+        sun.setCornerRadius(a.dp(28));
+        shop.setBackground(sun);
+        RowView buy = row(shop, R.drawable.ic_shield, R.color.ink, "Купить прокси", "Личный, уже настроен, с поддержкой");
+        buy.setTitleBold(true).setPadding(a.dp(16), a.dp(18), a.dp(14), a.dp(18));
+        buy.setBackground(null);
         buyPrice = buy.setPill(proxyPrice(), a.color(R.color.ink), 0xFFFFFFFF);
-        buyPrice.setContentDescription("Цена: " + buyPrice.getText());
+        buyPrice.setContentDescription("Цена " + buyPrice.getText());
+        shop.setOnClickListener(v -> a.openUrl(ShopCatalog.buyProxyUrl()));
         buy.setOnClickListener(v -> a.openUrl(ShopCatalog.buyProxyUrl()));
-        // The screen's one primary action: check every server at once; the line beside it says what happened.
-        LinearLayout check = new LinearLayout(a);
-        check.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        check.setPadding(a.dp(4), 0, 0, 0);
+        ((LinearLayout.LayoutParams) shop.getLayoutParams()).bottomMargin = a.dp(12);
+        // Two compact actions under it: add what you already have, check how the servers answer.
+        LinearLayout tools = new LinearLayout(a);
+        tools.addView(chip("Добавить", v -> showAdd()), new LinearLayout.LayoutParams(0, -2, 1));
+        android.view.View gap = new android.view.View(a);
+        tools.addView(gap, new LinearLayout.LayoutParams(a.dp(10), 1));
+        checkButton = chip("Проверить пинг", v -> pingAll());
+        tools.addView(checkButton, new LinearLayout.LayoutParams(0, -2, 1));
+        content.addView(tools, new LinearLayout.LayoutParams(-1, -2));
         checkStatus = new TextView(a);
         checkStatus.setTextAppearance(R.style.Caption);
-        check.addView(checkStatus, new LinearLayout.LayoutParams(0, -2, 1));
-        checkButton = pill(null, R.style.Pill, R.drawable.bg_pill_accent, "Проверить пинг", v -> pingAll());
-        check.addView(checkButton, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(-1, -2);
-        checkParams.bottomMargin = a.dp(16);
-        content.addView(check, checkParams);
+        checkStatus.setGravity(android.view.Gravity.CENTER);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.topMargin = a.dp(8);
+        statusParams.bottomMargin = a.dp(20);
+        content.addView(checkStatus, statusParams);
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         content.addView(list, new LinearLayout.LayoutParams(-1, -2));
         subscriptionsHost = new LinearLayout(a);
         subscriptionsHost.setOrientation(LinearLayout.VERTICAL);
         content.addView(subscriptionsHost, new LinearLayout.LayoutParams(-1, -2));
-        stateText = caption(content, "");
+        stateText = caption(content, ""); // only a broken link to the profile is worth a line here
+    }
+
+    /** A white rounded action, 44dp tall: smaller than a pill, still an obvious button. */
+    private TextView chip(String text, View.OnClickListener click) {
+        TextView chip = new TextView(a);
+        chip.setTextAppearance(R.style.RowText);
+        chip.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
+        chip.setText(text);
+        chip.setGravity(android.view.Gravity.CENTER);
+        chip.setMinHeight(a.dp(44));
+        chip.setPadding(a.dp(12), 0, a.dp(12), 0);
+        chip.setBackgroundResource(R.drawable.bg_card);
+        chip.setForeground(a.getDrawable(R.drawable.bg_row));
+        chip.setClipToOutline(true);
+        chip.setStateListAnimator(android.animation.AnimatorInflater.loadStateListAnimator(a, R.animator.tap));
+        chip.setOnClickListener(click);
+        return chip;
     }
 
     /** A rounded card in the home-screen style. */
@@ -164,7 +189,7 @@ final class ConnectionsPage extends Page {
     }
 
     private String proxyPrice() {
-        for (ShopCatalog.Item item : ShopCatalog.load(a)) if (item.id.equals("proxy")) return item.priceText();
+        for (ShopCatalog.Item item : ShopCatalog.load(a)) if (item.id.equals("proxy")) return "от " + item.priceText();
         return "Магазин";
     }
 
@@ -174,12 +199,8 @@ final class ConnectionsPage extends Page {
         String json = a.connectionList.toString() + a.subscriptionList + (a.state == null ? "" : a.state.optString("selectedId") + HomePage.exitVerdict(a.state));
         if (!json.equals(shownList)) { shownList = json; renderList(); }
         if (metricsPage.showing()) metricsPage.onState();
-        if (a.state == null) stateText.setText(a.linkProblem);
-        else {
-            String type = a.state.optString("selectedType");
-            stateText.setText(type.isEmpty() ? "Пока подключение не выбрано, интернет копий закрыт."
-                    : type.equals("Hysteria2") || type.equals("VLESS") ? "TCP и UDP. Интернет: только IPv4." : "Только TCP. Интернет: только IPv4.");
-        }
+        stateText.setText(a.state == null ? a.linkProblem : "");
+        stateText.setVisibility(a.state == null ? View.VISIBLE : View.GONE);
     }
 
     private void renderList() {
@@ -199,9 +220,11 @@ final class ConnectionsPage extends Page {
         }
         int manual = manualIds.size();
         updateCheckBar();
-        LinearLayout card = card(list);
+        // With subscriptions and no own proxies the empty card is noise; with nothing at all it says what to do.
+        LinearLayout card = manual == 0 && a.subscriptionList.length() > 0 ? new LinearLayout(a) : card(list);
+        card.setOrientation(LinearLayout.VERTICAL);
         titleRow(card, "Мои прокси").setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(6));
-        if (manual == 0) small(card, "Добавь купленный прокси или ссылку подписки.", R.color.muted).setPadding(a.dp(16), 0, a.dp(16), a.dp(10));
+        if (manual == 0) small(card, "Нажми «Добавить» и вставь ссылку или подписку — или купи прокси выше.", R.color.muted).setPadding(a.dp(16), 0, a.dp(16), a.dp(14));
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null || known.contains(item.optString("subscription"))) continue;
@@ -225,9 +248,6 @@ final class ConnectionsPage extends Page {
             });
             card.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
-        addRow(card, "Добавить подписку или подключение").setOnClickListener(v -> showAdd());
-        if (manual > 0) small(card, "Нажми, чтобы выбрать. Удерживай, чтобы изменить или удалить.", R.color.muted)
-                .setPadding(a.dp(16), a.dp(4), a.dp(16), a.dp(14));
         // Checks start after this pass: ping() redraws the list itself.
         if (manual > 0 && !pinged.contains("")) a.post(() -> ping("", false));
         for (int i = 0; i < a.subscriptionList.length(); i++) {
@@ -240,8 +260,10 @@ final class ConnectionsPage extends Page {
     private RowView serverRow(JSONObject item, boolean isSelected) {
         String id = item.optString("id"), name = item.optString("name");
         RowView row = new RowView(a);
-        row.setRadio(isSelected);
-        row.setTitle(name).setTitleBold(isSelected);
+        String flag = flag(name), shown = flag.isEmpty() ? name : name.replace(flag, " ").replaceAll("\\s+", " ").trim();
+        if (shown.isEmpty()) shown = name.isEmpty() ? "?" : name;
+        row.setGlyph(flag.isEmpty() ? shown.substring(0, shown.offsetByCodePoints(0, 1)).toUpperCase(java.util.Locale.ROOT) : flag, isSelected);
+        row.setTitle(shown).setTitleBold(isSelected);
         row.setContentDescription(name + (isSelected ? ", используется" : ", нажми, чтобы использовать"));
         row.setOnClickListener(v -> {
             if (isSelected) { metricsPage.showAsSheet(); metricsPage.onState(); return; }
@@ -402,9 +424,22 @@ final class ConnectionsPage extends Page {
         return Math.round(value / 1048576.0) + " МБ";
     }
 
+    /** The first country flag in a provider's server name (two regional indicator letters), or "". */
+    static String flag(String name) {
+        for (int i = 0; i < name.length(); ) {
+            int first = name.codePointAt(i), next = i + Character.charCount(first);
+            if (first >= 0x1F1E6 && first <= 0x1F1FF && next < name.length()) {
+                int second = name.codePointAt(next);
+                if (second >= 0x1F1E6 && second <= 0x1F1FF) return name.substring(i, next + Character.charCount(second));
+            }
+            i = next;
+        }
+        return "";
+    }
+
     /** The server in use also says what sites think of its exit; a tap on it opens the details. */
     private String rowCaption(String details, boolean isSelected) {
-        return isSelected ? details + " · " + HomePage.exitVerdict(a.state) : details;
+        return isSelected ? "Используется · " + details + " · " + HomePage.exitVerdict(a.state) : details;
     }
 
     static String servers(int n) {

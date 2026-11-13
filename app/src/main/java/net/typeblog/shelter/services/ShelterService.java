@@ -323,6 +323,8 @@ public class ShelterService extends Service {
         @Override public void setIpControl(boolean enabled, int minutes) throws RemoteException { vpn().setIpControl(enabled, minutes); }
         @Override public void confirmIp() throws RemoteException { vpn().confirmIp(); }
         @Override public void setAppConnection(String packageName, String connectionId) throws RemoteException { vpn().setAppConnection(packageName, connectionId); }
+        @Override public String exportSettings(String password) throws RemoteException { return vpn().exportSettings(password); }
+        @Override public String importSettings(String file, String password) throws RemoteException { return vpn().importSettings(file, password); }
         @Override public String diagnose() throws RemoteException { return vpn().diagnose(); }
         @Override public void checkExitIp() throws RemoteException { vpn().checkExitIp(); }
         @Override public String listSubscriptions() throws RemoteException { return vpn().listSubscriptions(); }

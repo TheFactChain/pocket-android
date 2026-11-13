@@ -99,6 +99,16 @@ public class RowView extends LinearLayout {
         return this;
     }
 
+    /** A choice mark: a filled circle with a check when chosen, an empty soft circle otherwise. */
+    public RowView setRadio(boolean chosen) {
+        tile.setVisibility(VISIBLE);
+        tile.setBackgroundResource(R.drawable.bg_circle);
+        icon.setImageResource(chosen ? R.drawable.ic_check : 0);
+        icon.setImageTintList(ColorStateList.valueOf(0xFFFFFFFF));
+        setTile(ContextCompat.getColor(getContext(), chosen ? R.color.accent : R.color.grey_soft));
+        return this;
+    }
+
     /** An application icon fills the tile instead of a glyph. */
     public RowView setAppIcon(Drawable drawable) {
         tile.setVisibility(VISIBLE);

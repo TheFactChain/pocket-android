@@ -50,18 +50,18 @@ public final class PingService extends Service {
         }
     };
 
-    private android.os.Handler main;
-    private final Runnable end = () -> Process.killProcess(Process.myPid());
+    // Static: Android destroys this service after the last unbind and creates a new instance for the next
+    // group's bind in the same process, so the pending end must be cancelled from whichever instance is bound.
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final Runnable END = () -> Process.killProcess(Process.myPid());
 
-    @Override public IBinder onBind(Intent intent) { return binder; }
+    @Override public IBinder onBind(Intent intent) { MAIN.removeCallbacks(END); return binder; }
 
-    // The next group's check often binds within the second: it must not land in a process about to end.
-    @Override public void onRebind(Intent intent) { if (main != null) main.removeCallbacks(end); }
+    @Override public void onRebind(Intent intent) { MAIN.removeCallbacks(END); }
 
     @Override public boolean onUnbind(Intent intent) {
-        // Nothing else lives in this process; ending it returns the core's memory at once.
-        if (main == null) main = new android.os.Handler(getMainLooper());
-        main.postDelayed(end, 3000);
+        // Nothing else lives in this process; ending it returns the core's memory once no check follows.
+        MAIN.postDelayed(END, 3000);
         return true;
     }
 

@@ -1,5 +1,6 @@
 package net.typeblog.shelter.connections;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -26,13 +27,15 @@ public final class ConnectionProfile {
     public final String subscription;
     /** VLESS only: split the TLS hello across TCP packets, as the provider's Xray config asks (finalmask fragment). */
     public final boolean fragment;
+    /** VLESS only: the provider's Xray outbounds as served (the server first, then the servers it is chained through), or empty. */
+    public final String xray;
     /** Types offered in the interface, as in Pocket Windows; VLESS stays readable by code only. */
     public static final java.util.List<String> UI_TYPES = Arrays.asList("hysteria2", "socks5", "http", "https");
 
     private ConnectionProfile(JSONObject json) {
         requireKeys(json, "id", "name", "type", "server", "port", "password", "uuid",
                 "serverName", "realityPublicKey", "shortId", "fingerprint", "flow", "obfsPassword", "username",
-                "security", "transport", "path", "host", "subscription", "fragment");
+                "security", "transport", "path", "host", "subscription", "fragment", "xray");
         subscription = string(json, "subscription", "");
         if (subscription.length() > 128) throw invalid("Некорректная подписка подключения.");
         id =string(json, "id", UUID.randomUUID().toString());
@@ -70,6 +73,15 @@ public final class ConnectionProfile {
             throw invalid("Маскировка Salamander есть только у Hysteria2.");
         }
         fragment = type.equals("vless") && json.optBoolean("fragment");
+        Object chainValue = json.opt("xray");
+        if (chainValue != null && !(chainValue instanceof String)) throw invalid("Неверный тип поля подключения.");
+        String chain = chainValue == null ? "" : (String) chainValue;
+        if (!chain.isEmpty()) {
+            if (!type.equals("vless") || chain.length() > 65536) throw invalid("Некорректная конфигурация Xray подключения.");
+            try { if (new JSONArray(chain).length() == 0) throw invalid("Некорректная конфигурация Xray подключения."); }
+            catch (JSONException e) { throw invalid("Некорректная конфигурация Xray подключения."); }
+        }
+        xray = chain;
         if (!type.equals("vless")) { security = ""; transport = ""; path = ""; wsHost = ""; }
         else {
             // Stored before TLS and transports existed: REALITY over TCP.
@@ -132,7 +144,7 @@ public final class ConnectionProfile {
                     .put("shortId", shortId).put("fingerprint", fingerprint).put("flow", flow)
                     .put("obfsPassword", obfsPassword).put("username", username)
                     .put("security", security).put("transport", transport).put("path", path).put("host", wsHost)
-                    .put("subscription", subscription).put("fragment", fragment);
+                    .put("subscription", subscription).put("fragment", fragment).put("xray", xray);
         } catch (JSONException e) {
             throw invalid("Не удалось сериализовать подключение.");
         }
@@ -228,7 +240,12 @@ public final class ConnectionProfile {
     public String details() {
         if (!type.equals("vless")) return typeLabel();
         String net = transport.equals("grpc") ? "gRPC" : transport.equals("ws") ? "WebSocket" : "TCP";
-        return "VLESS · " + net + " · " + (security.equals("reality") ? "REALITY" : "TLS");
+        return "VLESS · " + net + " · " + (security.equals("reality") ? "REALITY" : "TLS") + (chained() ? " · Double VPN" : "");
+    }
+
+    /** The provider's config reaches this server through another one (Xray dialerProxy). */
+    public boolean chained() {
+        try { return !xray.isEmpty() && new JSONArray(xray).length() > 1; } catch (JSONException e) { return false; }
     }
 
     /** Same server and settings, kept under another id and subscription. */

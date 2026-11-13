@@ -21,11 +21,16 @@ public final class PocketConfig {
 
     /** @param directRu Russian IPv4 networks reached around the proxy, or null when the setting is off. */
     public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu) {
+        return create(profile, resolvedServer, directRu, null);
+    }
+
+    /** @param carrier outbound used instead of the profile's own, e.g. the SOCKS hand-off to Xray (see XrayConfig). */
+    public static String create(ConnectionProfile profile, String resolvedServer, List<String> directRu, JSONObject carrier) {
         // An enabled setting without its list fails closed, as in Windows.
         if (directRu != null && directRu.isEmpty()) throw new IllegalArgumentException("Нет списка российских сетей");
         try {
-            JSONObject outbound = profile.toOutbound();
-            outbound.put("server", resolvedServer);
+            JSONObject outbound = carrier != null ? carrier : profile.toOutbound();
+            if (carrier == null) outbound.put("server", resolvedServer);
             JSONObject tun = new JSONObject().put("type", "tun").put("tag", "pocket-tun")
                     .put("address", new JSONArray().put("172.19.0.1/30").put("fdfe:dcba:9876::1/126"))
                     .put("dns_mode", "hijack")
@@ -40,7 +45,7 @@ public final class PocketConfig {
             if (!profile.udpSupported()) rules.put(new JSONObject().put("network", "udp").put("action", "reject"));
             // Xray clients refuse QUIC (UDP/443) under XTLS Vision and Vision servers do not carry it, so browsers
             // waited on a silent QUIC attempt; refusing it at once makes them use TCP right away, as with Happ.
-            else if (!outbound.optString("flow").isEmpty()) rules.put(new JSONObject().put("network", "udp").put("port", 443).put("action", "reject"));
+            else if (!profile.flow.isEmpty()) rules.put(new JSONObject().put("network", "udp").put("port", 443).put("action", "reject"));
             JSONArray outbounds = new JSONArray().put(outbound);
             JSONObject route = new JSONObject().put("auto_detect_interface", true).put("final", "proxy");
             if (directRu != null) {

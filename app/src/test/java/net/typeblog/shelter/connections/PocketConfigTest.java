@@ -59,6 +59,56 @@ public class PocketConfigTest {
         assertFalse(new JSONObject(PocketConfig.create(grpc, "192.0.2.1")).toString().contains("\"network\":\"udp\""));
     }
 
+    @Test public void vlessRunsOnXrayBehindPasswordedLoopbackSocks() throws Exception {
+        String key = "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0", user = "bf000d23-0752-40b4-affe-68f7707a9661";
+        ConnectionProfile link = ProfileImporter.parse("vless://" + user + "@de.example:443?security=reality&type=tcp"
+                + "&flow=xtls-rprx-vision&sni=www.example.com&pbk=" + key + "&sid=ab&fp=chrome").profiles.get(0);
+        JSONObject xray = new JSONObject(net.typeblog.shelter.vpn.XrayConfig.create(link, host -> "192.0.2.7", 20000, "u", "p"));
+        JSONObject in = xray.getJSONArray("inbounds").getJSONObject(0);
+        assertEquals("127.0.0.1", in.getString("listen"));
+        assertEquals("password", in.getJSONObject("settings").getString("auth"));
+        JSONObject out = xray.getJSONArray("outbounds").getJSONObject(0);
+        assertEquals("proxy", out.getString("tag"));
+        JSONObject server = out.getJSONObject("settings").getJSONArray("vnext").getJSONObject(0);
+        assertEquals("192.0.2.7", server.getString("address"));
+        assertEquals("xtls-rprx-vision", server.getJSONArray("users").getJSONObject(0).getString("flow"));
+        assertEquals("www.example.com", out.getJSONObject("streamSettings").getJSONObject("realitySettings").getString("serverName"));
+
+        JSONObject carrier = net.typeblog.shelter.vpn.XrayConfig.socksOutbound(20000, "u", "p");
+        JSONObject config = new JSONObject(PocketConfig.create(link, "192.0.2.7", null, carrier));
+        JSONObject proxy = config.getJSONArray("outbounds").getJSONObject(0);
+        assertEquals("socks", proxy.getString("type"));
+        assertEquals("127.0.0.1", proxy.getString("server"));
+        assertTrue("Vision still refuses QUIC", config.toString().contains("\"port\":443"));
+    }
+
+    @Test public void providerChainKeepsEveryHopAndResolvesItsNames() throws Exception {
+        String key = "jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0", user = "bf000d23-0752-40b4-affe-68f7707a9661";
+        JSONObject exit = new JSONObject().put("tag", "proxy").put("protocol", "vless")
+                .put("settings", new JSONObject().put("vnext", new org.json.JSONArray().put(new JSONObject().put("address", "exit.example").put("port", 443)
+                        .put("users", new org.json.JSONArray().put(new JSONObject().put("id", user).put("encryption", "none"))))))
+                .put("streamSettings", new JSONObject().put("network", "tcp").put("security", "reality")
+                        .put("realitySettings", new JSONObject().put("serverName", "www.example.com").put("publicKey", key).put("shortId", "ab"))
+                        .put("sockopt", new JSONObject().put("dialerProxy", "entry")));
+        JSONObject entry = new JSONObject(exit.toString()).put("tag", "entry");
+        entry.getJSONObject("settings").getJSONArray("vnext").getJSONObject(0).put("address", "entry.example");
+        entry.getJSONObject("streamSettings").remove("sockopt");
+        JSONObject config = new JSONObject().put("remarks", "Double").put("outbounds", new org.json.JSONArray().put(exit).put(entry)
+                .put(new JSONObject().put("protocol", "freedom").put("tag", "direct").put("settings", new JSONObject())));
+        ConnectionProfile profile = ProfileImporter.parse(config.toString()).profiles.get(0);
+        assertTrue(profile.chained());
+        assertTrue(profile.details().contains("Double VPN"));
+        JSONObject xray = new JSONObject(net.typeblog.shelter.vpn.XrayConfig.create(profile,
+                host -> host.equals("entry.example") ? "192.0.2.1" : "192.0.2.2", 20000, "u", "p"));
+        org.json.JSONArray outbounds = xray.getJSONArray("outbounds");
+        assertEquals(2, outbounds.length());
+        assertEquals("proxy", outbounds.getJSONObject(0).getString("tag"));
+        assertEquals("192.0.2.2", outbounds.getJSONObject(0).getJSONObject("settings").getJSONArray("vnext").getJSONObject(0).getString("address"));
+        assertEquals("192.0.2.1", outbounds.getJSONObject(1).getJSONObject("settings").getJSONArray("vnext").getJSONObject(0).getString("address"));
+        assertEquals("entry", outbounds.getJSONObject(0).getJSONObject("streamSettings").getJSONObject("sockopt").getString("dialerProxy"));
+        assertTrue(ConnectionProfile.fromJson(profile.toJson()).chained());
+    }
+
     @Test public void directRussianRoutingMatchesWindows() throws Exception {
         ConnectionProfile profile = ProfileImporter.parse("hy2://pw@vpn.example").profiles.get(0);
         java.util.List<String> nets = PocketConfig.parseNetworks(new java.io.FileReader("src/main/assets/ru-ipv4.txt"));

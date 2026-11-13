@@ -54,11 +54,13 @@ final class ConnectionsPage extends Page {
 
 
     @Override void build() {
-        LinearLayout group = group();
-        RowView buy = row(group, R.drawable.ic_shield, R.color.accent, "Купить Proxy", "Личный, настроен, с поддержкой");
+        // Order: buying a proxy, then the user's own proxies, then subscriptions.
+        LinearLayout shop = group();
+        RowView buy = row(shop, R.drawable.ic_shield, R.color.accent, "Купить Proxy", "Личный, настроен, с поддержкой");
         buy.setTitleColor(a.color(R.color.accent));
         buyPrice = buy.setPill(proxyPrice(), a.color(R.color.blue_soft), a.color(R.color.blue_ink));
         buy.setOnClickListener(v -> a.openUrl(ShopCatalog.buyProxyUrl()));
+        LinearLayout group = group();
         list = new LinearLayout(a);
         list.setOrientation(LinearLayout.VERTICAL);
         group.addView(list, new LinearLayout.LayoutParams(-1, -2));
@@ -66,8 +68,32 @@ final class ConnectionsPage extends Page {
         stateText = caption(content, "");
         subscriptionsHost = new LinearLayout(a);
         subscriptionsHost.setOrientation(LinearLayout.VERTICAL);
-        // Subscriptions come first, as in Happ: that is where most servers live.
-        content.addView(subscriptionsHost, content.indexOfChild(group), new LinearLayout.LayoutParams(-1, -2));
+        content.addView(subscriptionsHost, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    /** Group title with actions on the right, as the subscription cards have. */
+    private LinearLayout sectionHeader(LinearLayout parent, String title) {
+        LinearLayout top = new LinearLayout(a);
+        top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        top.setPadding(a.dp(16), a.dp(10), a.dp(12), a.dp(6));
+        TextView name = new TextView(a);
+        name.setTextAppearance(R.style.RowText);
+        name.setTypeface(null, android.graphics.Typeface.BOLD);
+        name.setText(title);
+        top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        parent.addView(top, new LinearLayout.LayoutParams(-1, -2));
+        return top;
+    }
+
+    private android.content.SharedPreferences uiPrefs() { return a.getSharedPreferences("pocket_ui", android.content.Context.MODE_PRIVATE); }
+
+    private boolean collapsed(String subId) { return uiPrefs().getStringSet("collapsed_subscriptions", java.util.Collections.emptySet()).contains(subId); }
+
+    private void setCollapsed(String subId, boolean value) {
+        java.util.Set<String> ids = new java.util.HashSet<>(uiPrefs().getStringSet("collapsed_subscriptions", java.util.Collections.emptySet()));
+        if (value) ids.add(subId); else ids.remove(subId);
+        uiPrefs().edit().putStringSet("collapsed_subscriptions", ids).apply();
+        renderList();
     }
 
     @Override void onShow() {
@@ -107,6 +133,13 @@ final class ConnectionsPage extends Page {
         int manual = 0;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
+            if (item != null && !known.contains(item.optString("subscription"))) manual++;
+        }
+        LinearLayout header = sectionHeader(list, "Мои прокси");
+        if (manual > 0) header.addView(textAction(pinging.contains("") ? "Пинг…" : "Пинг", v -> ping("", true)));
+        else small(list, "Добавь купленный прокси или ссылку из подписки.", R.color.muted).setPadding(a.dp(16), 0, a.dp(16), a.dp(10));
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
             if (item == null || known.contains(item.optString("subscription"))) continue;
             String id = item.optString("id"), name = item.optString("name"), type = item.optString("type");
             boolean isSelected = id.equals(selected);
@@ -124,20 +157,9 @@ final class ConnectionsPage extends Page {
                 if (editable) edit(id); else confirmDelete(id, name, isSelected);
             }));
             row.setEnd(end);
-            manual++;
             // Each connection brings its own top line; «Добавить» adds the line under the last one.
             separator(list);
             list.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        }
-        if (manual > 0) {
-            RowView check = new RowView(a);
-            check.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
-            check.setTitle("Проверить задержку");
-            check.setCaption("Запрос через каждое подключение, как в Happ");
-            check.setEnd(textAction(pinging.contains("") ? "Пинг…" : "Пинг", v -> ping("", true)));
-            check.setOnClickListener(v -> ping("", true));
-            separator(list);
-            list.addView(check, new LinearLayout.LayoutParams(-1, -2));
         }
         // Checks start after this pass: ping() redraws the list itself.
         if (manual > 0 && !pinged.contains("")) a.post(() -> ping("", false));
@@ -220,6 +242,9 @@ final class ConnectionsPage extends Page {
         name.setTextAppearance(R.style.RowText);
         name.setTypeface(null, android.graphics.Typeface.BOLD);
         name.setText(title);
+        boolean folded = collapsed(subId);
+        name.setOnClickListener(v -> setCollapsed(subId, !folded));
+        name.setContentDescription(title + (folded ? ", свёрнута, нажми, чтобы показать серверы" : ", нажми, чтобы свернуть"));
         top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         boolean busy = refreshing.contains(subId);
         top.addView(textAction(busy ? "Обновляем…" : "Обновить", v -> refreshSubscription(subId, title, false)));
@@ -278,6 +303,24 @@ final class ConnectionsPage extends Page {
         }
 
         int count = 0;
+        String usedHere = "";
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null || !subId.equals(item.optString("subscription"))) continue;
+            count++;
+            if (item.optString("id").equals(selected)) usedHere = item.optString("name");
+        }
+        if (folded) {
+            separator(card);
+            RowView show = new RowView(a);
+            show.setIcon(R.drawable.ic_globe, a.color(R.color.grey_soft), a.color(R.color.muted));
+            show.setTitle("Показать серверы: " + count);
+            if (!usedHere.isEmpty()) show.setCaption("Используется «" + usedHere + "»");
+            show.setOnClickListener(v -> setCollapsed(subId, false));
+            card.addView(show, new LinearLayout.LayoutParams(-1, -2));
+            return;
+        }
+        count = 0;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             if (item == null || !subId.equals(item.optString("subscription"))) continue;
@@ -304,6 +347,12 @@ final class ConnectionsPage extends Page {
             view.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
             view.setOnClickListener(v -> new AlertDialog.Builder(a).setTitle("Не поддерживаются")
                     .setMessage(skipped).setPositiveButton("Понятно", null).show());
+        }
+        if (count > 0) {
+            separator(card);
+            TextView fold = small(card, "Свернуть список", R.color.accent);
+            fold.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(14));
+            fold.setOnClickListener(v -> setCollapsed(subId, true));
         }
     }
 

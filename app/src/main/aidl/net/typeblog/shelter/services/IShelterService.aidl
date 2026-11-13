@@ -36,6 +36,8 @@ interface IShelterService {
     void activateConnection(String id);
     void deleteConnection(String id);
     void setDirectRu(boolean enabled);
+    void setIpControl(boolean enabled, int minutes);
+    void confirmIp();
     void checkConnectionNow();
     String listSubscriptions();
     String addSubscription(String url, boolean allowDevice);

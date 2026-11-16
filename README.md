@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/TheFactChain/pocket-android/releases/latest"><strong>Скачать Pocket</strong></a>
   · <a href="#установка">Установка</a>
+  · <a href="#как-выглядит-pocket">Скриншоты</a>
   · <a href="#возможности">Возможности</a>
   · <a href="#как-это-работает">Как это работает</a>
   · <a href="#разработка">Разработка</a>
@@ -32,6 +33,27 @@ Pocket создаёт рабочий профиль Android, в котором �
 
 Например, можно держать вторую учётную запись мессенджера в Pocket, не выходя
 из первой. Pocket — самостоятельная производная [Shelter](https://gitea.angry.im/PeterCxy/Shelter).
+
+## Как выглядит Pocket
+
+<p align="center">
+  <a href="docs/assets/screenshot-home.jpg"><img src="docs/assets/screenshot-home.jpg" width="42%" alt="Главный экран Pocket с копиями приложений"></a>
+  &nbsp;&nbsp;
+  <a href="docs/assets/screenshot-proxies.jpg"><img src="docs/assets/screenshot-proxies.jpg" width="42%" alt="Экран Pocket со списком подключений и проверкой пинга"></a>
+</p>
+
+<p align="center"><sub>Главный экран и список подключений. Нажми на скриншот, чтобы открыть его в полном размере.</sub></p>
+
+### Как отличить копию
+
+На домашнем экране Android отмечает приложения рабочего профиля специальной
+меткой. На примере ниже копия в Pocket находится справа и помечена значком
+чемодана. Внешний вид метки может отличаться в зависимости от устройства и
+лаунчера.
+
+<p align="center">
+  <a href="docs/assets/screenshot-work-badge.jpg"><img src="docs/assets/screenshot-work-badge.jpg" width="60%" alt="Два значка exteraGram: справа копия с меткой рабочего профиля"></a>
+</p>
 
 ## Возможности
 

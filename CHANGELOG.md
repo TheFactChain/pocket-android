@@ -1,3 +1,11 @@
+# Changelog
+
+Pocket Android changes are documented in the [Pocket releases](https://github.com/TheFactChain/pocket-android/releases).
+
+## Shelter history
+
+The entries below preserve the original Shelter changelog from before Pocket was forked. These are Shelter versions and features, not Pocket Android release notes.
+
 1.9.1 (445)
 ===
 

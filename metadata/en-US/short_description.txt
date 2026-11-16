@@ -1,1 +1,1 @@
-Isolate and run multiple instances of apps using Work Profiles
+App copies in an Android work profile, with your own proxy
